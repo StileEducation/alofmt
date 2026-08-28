@@ -1,0 +1,4 @@
+<<~EOS
+  trailing   
+  whitespace	
+EOS

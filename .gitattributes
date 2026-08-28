@@ -1,0 +1,3 @@
+# Formatter fixtures are byte-for-byte output samples. Some deliberately retain
+# trailing spaces or blank lines.
+tests/fixtures/** -whitespace

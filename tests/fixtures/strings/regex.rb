@@ -1,0 +1,41 @@
+/x/
+/x/i
+/x/imx
+/x/o
+/x/n
+%r{a/b}
+%r{a/\(b}
+%r{a/b}i
+/a\/{b/
+/a\/b}/
+%r{a/b}
+%r{a/b}i
+%r{a/b}mix
+/a/
+/a/
+/a/
+%r{a/b}
+/a}b/
+%r|a}/b|
+%r|a{/b|
+/a\}b/
+%r{a\}/b}
+/a{b}c/
+/a\{b/
+%r{a\/b}
+%r{a/\}}
+/a\\/
+%r{a\\/b}
+/a #{@x} b/
+/a #{@x} b/
+/#{@x}/i
+/#{@x}/
+%r{a/#{@x}}
+%r{a/#{@x}}
+/a\nb/
+/a{/
+/a
+b/x
+/
+  a
+/x

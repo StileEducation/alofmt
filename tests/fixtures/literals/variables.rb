@@ -1,0 +1,13 @@
+@x
+@@y
+$z
+$1
+$&
+$~
+self
+nil
+true
+false
+__FILE__
+__LINE__
+__ENCODING__

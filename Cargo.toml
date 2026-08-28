@@ -1,0 +1,38 @@
+[package]
+name = "alofmt"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+description = "A fast, deterministic, configurable Ruby formatter built on Prism"
+readme = "README.md"
+documentation = "https://docs.rs/alofmt"
+repository = "https://github.com/StileEducation/alofmt"
+license = "MIT"
+keywords = ["ruby", "formatter", "prism"]
+categories = ["command-line-utilities", "development-tools"]
+include = [
+    "src/**",
+    "tests/**",
+    "Cargo.lock",
+    "Cargo.toml",
+    "CONTRIBUTING.md",
+    "docs/**",
+    "LICENSE",
+    "README.md",
+    "rustfmt.toml",
+]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ignore = "0.4"
+memchr = "2"
+rayon = "1"
+ruby-prism = "1.9"
+rustc-hash = "2"
+serde = { version = "1", features = ["derive"] }
+similar = "2"
+toml = "1.1"
+
+[profile.release]
+lto = "thin"

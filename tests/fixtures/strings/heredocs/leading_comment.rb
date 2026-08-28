@@ -1,0 +1,4 @@
+# leading
+<<~EOS
+  a
+EOS

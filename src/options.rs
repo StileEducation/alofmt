@@ -1,0 +1,182 @@
+use anyhow::{Context, Result, ensure};
+use serde::Deserialize;
+
+/// Formatting policy used by [`crate::format_with_options`].
+///
+/// Defaults are project-neutral and avoid method-name special cases or
+/// syntax rewrites that are better selected by repository configuration.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct FormatOptions {
+    /// Maximum width used when deciding whether a document group fits.
+    pub line_width: usize,
+    /// Spaces emitted for one indentation level.
+    pub indent_width: usize,
+    /// Width charged to one indentation level while measuring a line.
+    pub fit_indent_width: usize,
+    /// Preferred delimiter for plain strings and quoted symbols.
+    pub quote_style: QuoteStyle,
+    /// Add a trailing comma when a collection or argument list breaks.
+    pub trailing_commas: bool,
+    /// Convert eligible arrays to `%w` or `%i` literals.
+    pub prefer_percent_arrays: bool,
+    /// Add thousands separators to eligible decimal integer literals.
+    pub normalize_number_separators: bool,
+    /// Spell an omitted rescue class as `StandardError`.
+    pub explicit_standard_error: bool,
+    /// Comment bodies that make the following node print verbatim.
+    pub ignore_directives: Vec<String>,
+    /// Number of chained calls that makes a chain break by default.
+    pub chain_break_threshold: usize,
+    /// Chain threshold inside blocks named by [`Self::compact_chain_blocks`].
+    pub compact_chain_break_threshold: usize,
+    /// Block-call names that use [`Self::compact_chain_break_threshold`].
+    pub compact_chain_blocks: Vec<String>,
+    /// Command-call names whose continuations do not align under the first
+    /// argument.
+    pub unaligned_command_calls: Vec<String>,
+    /// Do not align a command continuation when its prefix exceeds this many
+    /// columns. Zero disables prefix alignment.
+    pub max_command_alignment: usize,
+}
+
+impl Default for FormatOptions {
+    fn default() -> Self {
+        Self {
+            line_width: 80,
+            indent_width: 2,
+            fit_indent_width: 2,
+            quote_style: QuoteStyle::Preserve,
+            trailing_commas: false,
+            prefer_percent_arrays: false,
+            normalize_number_separators: false,
+            explicit_standard_error: false,
+            ignore_directives: vec!["alofmt-ignore".to_owned()],
+            chain_break_threshold: 3,
+            compact_chain_break_threshold: 3,
+            compact_chain_blocks: Vec::new(),
+            unaligned_command_calls: Vec::new(),
+            max_command_alignment: 40,
+        }
+    }
+}
+
+impl FormatOptions {
+    /// Parse a strict TOML configuration, filling omitted fields from the
+    /// project-neutral defaults.
+    pub fn from_toml(source: &str) -> Result<Self> {
+        let options: Self = toml::from_str(source).context("parse formatter configuration")?;
+        options.validate()?;
+        Ok(options)
+    }
+
+    /// Validate options assembled programmatically.
+    pub fn validate(&self) -> Result<()> {
+        ensure!(self.line_width > 0, "line width must be greater than zero");
+        ensure!(self.indent_width > 0, "indent width must be greater than zero");
+        ensure!(self.fit_indent_width > 0, "fit indent width must be greater than zero");
+        ensure!(
+            self.chain_break_threshold > 0,
+            "chain break threshold must be greater than zero"
+        );
+        ensure!(
+            self.compact_chain_break_threshold > 0,
+            "compact chain break threshold must be greater than zero"
+        );
+        for directive in &self.ignore_directives {
+            ensure!(!directive.is_empty(), "ignore directives cannot be empty");
+            ensure!(
+                !directive.bytes().any(|byte| byte == b'\n' || byte == b'\r'),
+                "ignore directives cannot contain line breaks"
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Preferred delimiter for plain strings and quoted symbols.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum QuoteStyle {
+    /// Prefer single quotes where changing delimiters is semantics-preserving.
+    Single,
+    /// Prefer double quotes where changing delimiters is semantics-preserving.
+    Double,
+    /// Keep the source delimiter.
+    #[default]
+    Preserve,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_do_not_encode_project_method_names_or_syntax_rewrites() {
+        let options = FormatOptions::default();
+
+        assert_eq!(options.indent_width, options.fit_indent_width);
+        assert_eq!(options.quote_style, QuoteStyle::Preserve);
+        assert!(!options.trailing_commas);
+        assert!(!options.prefer_percent_arrays);
+        assert!(!options.normalize_number_separators);
+        assert!(!options.explicit_standard_error);
+        assert_eq!(options.ignore_directives, ["alofmt-ignore"]);
+        assert!(options.compact_chain_blocks.is_empty());
+        assert!(options.unaligned_command_calls.is_empty());
+    }
+
+    #[test]
+    fn rejects_zero_widths() {
+        let options = FormatOptions {
+            line_width: 0,
+            ..FormatOptions::default()
+        };
+
+        assert_eq!(
+            options.validate().expect_err("zero width should fail").to_string(),
+            "line width must be greater than zero"
+        );
+    }
+
+    #[test]
+    fn rejects_multiline_ignore_directives() {
+        let options = FormatOptions {
+            ignore_directives: vec!["alofmt-ignore\nnext".to_owned()],
+            ..FormatOptions::default()
+        };
+
+        assert_eq!(
+            options
+                .validate()
+                .expect_err("multiline directive should fail")
+                .to_string(),
+            "ignore directives cannot contain line breaks"
+        );
+    }
+
+    #[test]
+    fn parses_partial_configuration_over_defaults() {
+        let options = FormatOptions::from_toml(
+            r#"
+                line_width = 100
+                quote_style = "single"
+                compact_chain_blocks = ["typed"]
+            "#,
+        )
+        .expect("valid configuration");
+
+        assert_eq!(options.line_width, 100);
+        assert_eq!(options.indent_width, 2);
+        assert_eq!(options.quote_style, QuoteStyle::Single);
+        assert_eq!(options.compact_chain_blocks, ["typed"]);
+    }
+
+    #[test]
+    fn rejects_unknown_configuration_fields() {
+        let error = FormatOptions::from_toml("line_wdith = 100").expect_err("misspelled field should fail");
+
+        assert!(error.to_string().contains("parse formatter configuration"));
+        assert!(format!("{error:#}").contains("unknown field `line_wdith`"));
+    }
+}

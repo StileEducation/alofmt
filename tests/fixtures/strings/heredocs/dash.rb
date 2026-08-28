@@ -1,0 +1,3 @@
+<<-EOS
+  hello
+  EOS
