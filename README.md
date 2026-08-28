@@ -45,10 +45,10 @@ Install alofmt with Homebrew:
 brew install AllyMarthaJ/tap/alofmt
 ```
 
-Or install it from source with Cargo:
+Or install it with Cargo:
 
 ```sh
-cargo install --locked --git https://github.com/StileEducation/alofmt --tag 0.1.0
+cargo install --locked alofmt
 ```
 
 Then format or check a project:
