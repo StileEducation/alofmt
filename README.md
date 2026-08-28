@@ -39,10 +39,16 @@ published =
 
 ## Quick start
 
-Install alofmt from source with Cargo:
+Install alofmt with Homebrew:
 
 ```sh
-cargo install --locked alofmt
+brew install AllyMarthaJ/tap/alofmt
+```
+
+Or install it from source with Cargo:
+
+```sh
+cargo install --locked --git https://github.com/StileEducation/alofmt --tag 0.1.0
 ```
 
 Then format or check a project:
