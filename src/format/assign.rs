@@ -110,6 +110,17 @@ pub fn stays_inline(f: &Formatter<'_>, value: &Node<'_>) -> bool {
         }
         Node::CallNode { .. } => {
             let call = value.as_call_node().expect("kind");
+            // The same-line layout keeps any call or chain beside the
+            // operator, except bare command calls, whose unbracketed
+            // arguments have nowhere good to break.
+            if f.options.multiline_assignment_layout == crate::options::MultilineAssignmentLayout::SameLine {
+                // Something after the operator must be able to break: a
+                // bracket, a block, or a dot chain. A bare identifier call
+                // still moves down whole, like any other unbreakable value.
+                return !call.is_attribute_write()
+                    && !(call.arguments().is_some() && call.opening_loc().is_none())
+                    && (call.opening_loc().is_some() || call.block().is_some() || call.receiver().is_some());
+            }
             let Some(receiver) = call.receiver() else {
                 return false;
             };
@@ -464,9 +475,14 @@ pub fn multi_write_node(f: &mut Formatter<'_>, node: &MultiWriteNode<'_>) {
             targets(f, lefts.into_iter(), rest, rights.into_iter());
         });
         f.b.text(" =");
-        f.indent(|f| {
-            f.b.line(SPACE);
-            f.node(&node.value());
-        });
+        // The reference always moves a multi-write value down; only the
+        // same-line layout keeps it beside the operator, and a header comment
+        // (`a, b = # c`) still forces the break.
+        let headed = std::mem::take(&mut f.header_break);
+        let inline = f.options.multiline_assignment_layout == crate::options::MultilineAssignmentLayout::SameLine
+            && stays_inline(f, &node.value())
+            && !headed;
+        f.header_break = headed && !inline;
+        assignment_value(f, &node.value(), inline);
     });
 }

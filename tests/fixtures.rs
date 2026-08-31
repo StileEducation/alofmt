@@ -1,5 +1,7 @@
 //! Every file under `tests/fixtures` is canonical output under the explicit
-//! compatibility profile, so formatting it must change nothing.
+//! compatibility profile, and every file under `tests/layout_fixtures` is
+//! canonical under that profile plus the opt-in layout options; formatting
+//! either must change nothing.
 
 use std::path::Path;
 
@@ -16,11 +18,22 @@ fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
 
 #[test]
 fn fixtures_are_fixpoints() {
-    let options = alofmt::FormatOptions::from_toml(include_str!("compatibility.toml"))
-        .expect("valid fixture compatibility configuration");
+    assert_fixpoints(include_str!("compatibility.toml"), "/tests/fixtures");
+}
+
+#[test]
+fn layout_fixtures_are_fixpoints() {
+    assert_fixpoints(
+        concat!(include_str!("compatibility.toml"), include_str!("layout.toml")),
+        "/tests/layout_fixtures",
+    );
+}
+
+fn assert_fixpoints(profile: &str, fixture_dir: &str) {
+    let options = alofmt::FormatOptions::from_toml(profile).expect("valid fixture compatibility configuration");
     let mut paths = Vec::new();
     walk(
-        Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures")),
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join(fixture_dir.trim_start_matches('/')),
         &mut paths,
     );
     paths.sort();
