@@ -644,6 +644,58 @@ mod tests {
     }
 
     #[test]
+    fn consistent_delimited_arguments_break_at_the_line_indent() {
+        let options = FormatOptions {
+            line_width: 30,
+            indent_width: 4,
+            fit_indent_width: 4,
+            delimited_argument_alignment: crate::DelimitedArgumentAlignment::Consistent,
+            ..FormatOptions::default()
+        };
+
+        assert_eq!(
+            format_with_options(b"run App.new(alpha: service.alpha, beta: service.beta)\n", &options)
+                .expect("valid Ruby"),
+            "run App.new(\n    alpha: service.alpha,\n    beta: service.beta\n)\n"
+        );
+        // Bare argument lists keep their aligned continuations.
+        assert_eq!(
+            format_with_options(b"raise ArgumentError, 'a message that will not fit'\n", &options).expect("valid Ruby"),
+            "raise ArgumentError,\n      'a message that will not fit'\n"
+        );
+    }
+
+    #[test]
+    fn same_line_assignments_keep_a_breakable_value_on_the_assignment_line() {
+        let options = FormatOptions {
+            line_width: 30,
+            indent_width: 4,
+            fit_indent_width: 4,
+            multiline_assignment_layout: crate::MultilineAssignmentLayout::SameLine,
+            ..FormatOptions::default()
+        };
+
+        assert_eq!(
+            format_with_options(b"result = Open3.capture2('git', 'diff', '--name-only')\n", &options)
+                .expect("valid Ruby"),
+            "result = Open3.capture2(\n    'git',\n    'diff',\n    '--name-only'\n)\n"
+        );
+        assert_eq!(
+            format_with_options(
+                b"out, status = Open3.capture2('git', 'diff', '--name-only')\n",
+                &options
+            )
+            .expect("valid Ruby"),
+            "out, status = Open3.capture2(\n    'git',\n    'diff',\n    '--name-only'\n)\n"
+        );
+        // A value with no internal break still moves to its own line.
+        assert_eq!(
+            format_with_options(b"a_variable = another_quite_long_variable\n", &options).expect("valid Ruby"),
+            "a_variable =\n    another_quite_long_variable\n"
+        );
+    }
+
+    #[test]
     fn supports_custom_ignore_directives() {
         let options = FormatOptions {
             ignore_directives: vec!["keep".to_owned()],

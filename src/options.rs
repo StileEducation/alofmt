@@ -38,6 +38,11 @@ pub struct FormatOptions {
     /// Do not align a command continuation when its prefix exceeds this many
     /// columns. Zero disables prefix alignment.
     pub max_command_alignment: usize,
+    /// Where the contents of a command call's sole bracketed argument sit
+    /// when the call has to break.
+    pub delimited_argument_alignment: DelimitedArgumentAlignment,
+    /// Where the value of an assignment that cannot fit on one line goes.
+    pub multiline_assignment_layout: MultilineAssignmentLayout,
 }
 
 impl Default for FormatOptions {
@@ -57,6 +62,8 @@ impl Default for FormatOptions {
             compact_chain_blocks: Vec::new(),
             unaligned_command_calls: Vec::new(),
             max_command_alignment: 40,
+            delimited_argument_alignment: DelimitedArgumentAlignment::Aligned,
+            multiline_assignment_layout: MultilineAssignmentLayout::NewLine,
         }
     }
 }
@@ -94,6 +101,34 @@ impl FormatOptions {
     }
 }
 
+/// Where the contents of a command call's sole bracketed argument sit when
+/// the call has to break.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DelimitedArgumentAlignment {
+    /// Under the argument's own column, closing bracket alongside.
+    #[default]
+    Aligned,
+    /// One level in from the start of the line, closing bracket back at the
+    /// line's indent. RuboCop calls this first-argument style `consistent`;
+    /// rustfmt calls the same layout `overflow_delimited_expr`.
+    Consistent,
+}
+
+/// Where the value of an assignment that cannot fit on one line goes. The
+/// names are RuboCop's `Layout/MultilineAssignmentLayout` styles.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MultilineAssignmentLayout {
+    /// The whole value moves to an indented line, unless it opens a bracket.
+    #[default]
+    NewLine,
+    /// A value that can break — a call with parentheses, a block, or a dot
+    /// chain — keeps its head on the assignment line and breaks below it. A
+    /// value with nothing to break still moves down whole.
+    SameLine,
+}
+
 /// Preferred delimiter for plain strings and quoted symbols.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -124,6 +159,11 @@ mod tests {
         assert_eq!(options.ignore_directives, ["alofmt-ignore"]);
         assert!(options.compact_chain_blocks.is_empty());
         assert!(options.unaligned_command_calls.is_empty());
+        assert_eq!(
+            options.delimited_argument_alignment,
+            DelimitedArgumentAlignment::Aligned
+        );
+        assert_eq!(options.multiline_assignment_layout, MultilineAssignmentLayout::NewLine);
     }
 
     #[test]

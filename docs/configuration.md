@@ -30,6 +30,8 @@ Every field is optional.
 | `compact_chain_blocks` | `[]` | Block-call names that use the compact threshold. |
 | `unaligned_command_calls` | `[]` | Command-call names whose broken arguments do not align under the first argument. |
 | `max_command_alignment` | `40` | Longest command prefix eligible for continuation alignment; `0` disables it. |
+| `delimited_argument_alignment` | `"aligned"` | Where a command call's sole bracketed argument sits when the call breaks: `aligned` under the argument's own column, or `consistent` one level in from the start of the line with the closing bracket back at the line's indent. |
+| `multiline_assignment_layout` | `"new_line"` | Where the value of an assignment that cannot fit goes, named after RuboCop's styles: `new_line` moves it down whole, `same_line` keeps a breakable value's head beside the operator. |
 
 Quote conversion occurs only when changing delimiters preserves the string's
 meaning.

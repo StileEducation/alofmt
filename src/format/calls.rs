@@ -740,6 +740,7 @@ fn method_call(f: &mut Formatter<'_>, node: &CallNode<'_>) {
                 let prefix = if unaligned_command(f, node)
                     || f.options.max_command_alignment == 0
                     || (node.receiver().is_some() && prefix > f.options.max_command_alignment)
+                    || consistent_sole_argument(f, arguments.as_ref(), block_argument.as_ref())
                 {
                     0
                 } else {
@@ -782,6 +783,42 @@ fn statement_starts(body: Option<Node<'_>>) -> Vec<usize> {
             .map(|s| s.body().iter().map(|n| n.location().start_offset()).collect())
     })
     .unwrap_or_default()
+}
+
+/// Under [`crate::DelimitedArgumentAlignment::Consistent`], a command whose
+/// sole argument opens a bracket breaks that bracket at the enclosing indent
+/// instead of the argument column, so the closing delimiter lines up with the
+/// start of the command.
+fn consistent_sole_argument(
+    f: &Formatter<'_>,
+    arguments: Option<&ArgumentsNode<'_>>,
+    block_argument: Option<&Node<'_>>,
+) -> bool {
+    if f.options.delimited_argument_alignment == crate::options::DelimitedArgumentAlignment::Aligned
+        || block_argument.is_some()
+    {
+        return false;
+    }
+    let Some(arguments) = arguments else {
+        return false;
+    };
+    if arguments.arguments().len() != 1 {
+        return false;
+    }
+    match arguments.arguments().first() {
+        Some(Node::ArrayNode { .. }) => arguments
+            .arguments()
+            .first()
+            .and_then(|a| a.as_array_node())
+            .is_some_and(|a| a.opening_loc().is_some()),
+        Some(Node::HashNode { .. } | Node::LambdaNode { .. }) => true,
+        Some(Node::CallNode { .. }) => arguments
+            .arguments()
+            .first()
+            .and_then(|a| a.as_call_node())
+            .is_some_and(|c| c.opening_loc().is_some() && c.arguments().is_some()),
+        _ => false,
+    }
 }
 
 /// Command calls whose continuation lines sit at the enclosing indent rather

@@ -124,6 +124,26 @@ struct StyleOptions {
     /// Maximum command prefix width eligible for continuation alignment.
     #[arg(long)]
     max_command_alignment: Option<usize>,
+
+    /// Where a command call's sole bracketed argument sits when it breaks.
+    #[arg(long, value_enum)]
+    delimited_argument_alignment: Option<DelimitedArgumentAlignment>,
+
+    /// Where the value of an assignment that cannot fit on one line goes.
+    #[arg(long, value_enum)]
+    multiline_assignment_layout: Option<MultilineAssignmentLayout>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum DelimitedArgumentAlignment {
+    Aligned,
+    Consistent,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum MultilineAssignmentLayout {
+    NewLine,
+    SameLine,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -151,6 +171,18 @@ impl StyleOptions {
             self.compact_chain_break_threshold,
         );
         set_if_some(&mut options.max_command_alignment, self.max_command_alignment);
+        if let Some(alignment) = self.delimited_argument_alignment {
+            options.delimited_argument_alignment = match alignment {
+                DelimitedArgumentAlignment::Aligned => alofmt::DelimitedArgumentAlignment::Aligned,
+                DelimitedArgumentAlignment::Consistent => alofmt::DelimitedArgumentAlignment::Consistent,
+            };
+        }
+        if let Some(layout) = self.multiline_assignment_layout {
+            options.multiline_assignment_layout = match layout {
+                MultilineAssignmentLayout::NewLine => alofmt::MultilineAssignmentLayout::NewLine,
+                MultilineAssignmentLayout::SameLine => alofmt::MultilineAssignmentLayout::SameLine,
+            };
+        }
         if let Some(style) = self.quote_style {
             options.quote_style = match style {
                 QuoteStyle::Single => alofmt::QuoteStyle::Single,
