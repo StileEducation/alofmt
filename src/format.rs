@@ -733,6 +733,47 @@ mod tests {
         );
     }
 
+    /// Formatting once must reach the fixpoint: the layout rules that treat a
+    /// bracketed array specially see the array as it prints, not as written.
+    #[test]
+    fn percent_array_modes_reach_the_fixpoint_in_one_pass() {
+        let sources: [&[u8]; 4] = [
+            b"x = %w[a b].to_h do |v|\n  v\nend\n",
+            b"y = %w[a b].zip([long_name_one, long_name_two, long_name_three, long_name_four])\n",
+            b"z = ['a', 'b'].map do |v|\n  v\nend\n",
+            b"puts %w[a b]\n",
+        ];
+        for mode in [
+            crate::options::PercentArrays::Avoid,
+            crate::options::PercentArrays::Prefer,
+            crate::options::PercentArrays::Preserve,
+        ] {
+            let options = FormatOptions {
+                percent_arrays: mode,
+                line_width: 40,
+                ..FormatOptions::default()
+            };
+            for source in sources {
+                let once = format_with_options(source, &options).expect("valid Ruby");
+                let twice = format_with_options(once.as_bytes(), &options).expect("valid Ruby");
+                assert_eq!(
+                    once,
+                    twice,
+                    "{mode:?} is not a fixpoint for {:?}",
+                    std::str::from_utf8(source)
+                );
+            }
+        }
+        let avoid = FormatOptions {
+            percent_arrays: crate::options::PercentArrays::Avoid,
+            ..FormatOptions::default()
+        };
+        assert_eq!(
+            format_with_options(sources[0], &avoid).expect("valid Ruby"),
+            "x = ['a', 'b'].to_h { |v| v }\n"
+        );
+    }
+
     #[test]
     fn comments_between_a_pairs_key_and_value_move_the_value_down() {
         let source = b"foo(\n  bounds: # why\n  # more\n  Bar.new(a: 1),\n  other: # only here\n  { a: 1 },\n  plain: Baz.new,\n)\n";

@@ -174,6 +174,22 @@ fn percent_kind(f: &Formatter<'_>, node: &ArrayNode<'_>) -> Option<&'static str>
     None
 }
 
+/// Whether an array prints with square brackets: a bracketed source that the
+/// policy does not collapse, or a percent literal it spells out. Layout rules
+/// that treat a bracketed array specially must ask this, not the source, or
+/// the second pass lays the code out differently from the first.
+pub(super) fn prints_bracketed(f: &Formatter<'_>, node: &ArrayNode<'_>) -> bool {
+    let Some(opening) = node.opening_loc() else {
+        return false;
+    };
+    let opening = f.slice(&opening);
+    if opening.starts_with('%') {
+        f.options.percent_arrays == crate::options::PercentArrays::Avoid && bracket_words(f, node, opening).is_some()
+    } else {
+        !(f.options.percent_arrays == crate::options::PercentArrays::Prefer && percent_kind(f, node).is_some())
+    }
+}
+
 /// One element of a `%w` or `%i` literal spelled for a bracketed array.
 enum Word {
     Quoted(char, String),
@@ -1090,11 +1106,7 @@ fn chain(f: &mut Formatter<'_>, members: &[&CallNode<'_>]) {
 fn literal_head(f: &Formatter<'_>, head: &Node<'_>) -> bool {
     match head {
         Node::HashNode { .. } | Node::XStringNode { .. } | Node::InterpolatedXStringNode { .. } => true,
-        Node::ArrayNode { .. } => head
-            .as_array_node()
-            .expect("kind")
-            .opening_loc()
-            .is_some_and(|o| f.slice(&o) == "["),
+        Node::ArrayNode { .. } => prints_bracketed(f, &head.as_array_node().expect("kind")),
         _ => false,
     }
 }

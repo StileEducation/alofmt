@@ -1047,7 +1047,7 @@ fn jump_arguments(f: &mut Formatter<'_>, arguments: &[Node<'_>]) {
         [single]
             if single
                 .as_array_node()
-                .is_some_and(|a| a.opening_loc().is_some_and(|o| f.slice(&o) == "[")) =>
+                .is_some_and(|a| super::calls::prints_bracketed(f, &a)) =>
         {
             let elements: Vec<Node<'_>> = single.as_array_node().expect("kind").elements().iter().collect();
             if elements.len() >= 2 {
