@@ -31,7 +31,7 @@ rayon = "1"
 ruby-prism = "1.9"
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"] }
-similar = "2"
+similar = "3"
 toml = "1.1"
 
 [profile.release]
