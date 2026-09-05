@@ -89,6 +89,28 @@ fn character_literal(f: &mut Formatter<'_>, content: &str) {
     }
 }
 
+/// The delimiter a bare word from a `%w` literal takes as a plain string
+/// under the quote style, or `None` when neither delimiter holds it verbatim.
+pub fn word_quote(f: &Formatter<'_>, content: &str) -> Option<char> {
+    let (first, second) = match f.options.quote_style {
+        QuoteStyle::Double => ('"', '\''),
+        QuoteStyle::Single | QuoteStyle::Preserve => ('\'', '"'),
+    };
+    [first, second].into_iter().find(|quote| can_use_quote(content, *quote))
+}
+
+pub fn quoted_word(f: &mut Formatter<'_>, quote: char, content: &str) {
+    match quote {
+        '\'' => single_quoted(f, content),
+        _ => double_quoted(f, content),
+    }
+}
+
+/// Whether a bare word from a `%i` literal prints as `:word`.
+pub fn is_bare_symbol(value: &str) -> bool {
+    is_label_identifier(value)
+}
+
 fn single_quoted(f: &mut Formatter<'_>, content: &str) {
     f.b.text("'");
     literal_text(f, content);

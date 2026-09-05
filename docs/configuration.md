@@ -21,7 +21,7 @@ Every field is optional.
 | `fit_indent_width` | `2` | Indentation width used while measuring whether a group fits. |
 | `quote_style` | `"preserve"` | Plain string and symbol delimiters: `single`, `double`, or `preserve`. |
 | `trailing_commas` | `false` | Add trailing commas to broken collections and argument lists. |
-| `prefer_percent_arrays` | `false` | Convert eligible arrays to `%w` and `%i` literals. |
+| `percent_arrays` | `"preserve"` | Arrays of single-word strings or symbols: `prefer` collapses bracketed ones to `%w` and `%i`, `avoid` rewrites `%w` and `%i` literals as bracketed arrays, `preserve` keeps every array as written. |
 | `normalize_number_separators` | `false` | Add thousands separators to eligible decimal integers. |
 | `explicit_standard_error` | `false` | Spell an omitted rescue class as `StandardError`. |
 | `ignore_directives` | `["alofmt-ignore"]` | Comment bodies that copy the following node verbatim. |

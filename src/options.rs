@@ -18,8 +18,9 @@ pub struct FormatOptions {
     pub quote_style: QuoteStyle,
     /// Add a trailing comma when a collection or argument list breaks.
     pub trailing_commas: bool,
-    /// Convert eligible arrays to `%w` or `%i` literals.
-    pub prefer_percent_arrays: bool,
+    /// Whether an array of single-word strings or symbols collapses to a
+    /// `%w` or `%i` literal.
+    pub percent_arrays: PercentArrays,
     /// Add thousands separators to eligible decimal integer literals.
     pub normalize_number_separators: bool,
     /// Spell an omitted rescue class as `StandardError`.
@@ -53,7 +54,7 @@ impl Default for FormatOptions {
             fit_indent_width: 2,
             quote_style: QuoteStyle::Preserve,
             trailing_commas: false,
-            prefer_percent_arrays: false,
+            percent_arrays: PercentArrays::Preserve,
             normalize_number_separators: false,
             explicit_standard_error: false,
             ignore_directives: vec!["alofmt-ignore".to_owned()],
@@ -129,6 +130,21 @@ pub enum MultilineAssignmentLayout {
     SameLine,
 }
 
+/// How an array of single-word strings or symbols is spelled.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PercentArrays {
+    /// Collapse an eligible bracketed array to its `%w` or `%i` literal.
+    Prefer,
+    /// Keep every array as written.
+    #[default]
+    Preserve,
+    /// Rewrite a `%w` or `%i` literal as a bracketed array. An interpolating
+    /// `%W` or `%I`, and a literal with a word neither string delimiter can
+    /// hold verbatim, stay as written.
+    Avoid,
+}
+
 /// Preferred delimiter for plain strings and quoted symbols.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -153,7 +169,7 @@ mod tests {
         assert_eq!(options.indent_width, options.fit_indent_width);
         assert_eq!(options.quote_style, QuoteStyle::Preserve);
         assert!(!options.trailing_commas);
-        assert!(!options.prefer_percent_arrays);
+        assert_eq!(options.percent_arrays, PercentArrays::Preserve);
         assert!(!options.normalize_number_separators);
         assert!(!options.explicit_standard_error);
         assert_eq!(options.ignore_directives, ["alofmt-ignore"]);
@@ -201,6 +217,7 @@ mod tests {
             r#"
                 line_width = 100
                 quote_style = "single"
+                percent_arrays = "prefer"
                 compact_chain_blocks = ["typed"]
             "#,
         )
@@ -209,6 +226,7 @@ mod tests {
         assert_eq!(options.line_width, 100);
         assert_eq!(options.indent_width, 2);
         assert_eq!(options.quote_style, QuoteStyle::Single);
+        assert_eq!(options.percent_arrays, PercentArrays::Prefer);
         assert_eq!(options.compact_chain_blocks, ["typed"]);
     }
 

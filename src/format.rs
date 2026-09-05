@@ -734,11 +734,59 @@ mod tests {
     }
 
     #[test]
+    fn avoiding_percent_arrays_spells_them_out_where_the_words_allow() {
+        let avoid = FormatOptions {
+            percent_arrays: crate::options::PercentArrays::Avoid,
+            ..FormatOptions::default()
+        };
+        let source = b"w = %w[c d]\ns = %i[a b?]\nq = %i[foo-bar]\na = %w[it's]\ne = %w[]\n";
+        assert_eq!(
+            format_with_options(source, &avoid).expect("valid Ruby"),
+            "w = ['c', 'd']\ns = [:a, :b?]\nq = [:'foo-bar']\na = [\"it's\"]\ne = []\n"
+        );
+        // Interpolation and escapes keep the literal as written.
+        let kept = b"i = %W[#{x} y]\nb = %w[a\\ b]\n";
+        assert_eq!(
+            format_with_options(kept, &avoid).expect("valid Ruby"),
+            "i = %W[#{x} y]\nb = %w[a\\ b]\n"
+        );
+        let double = FormatOptions {
+            quote_style: crate::options::QuoteStyle::Double,
+            ..avoid
+        };
+        assert_eq!(
+            format_with_options(b"w = %w[c d]\n", &double).expect("valid Ruby"),
+            "w = [\"c\", \"d\"]\n"
+        );
+    }
+
+    #[test]
+    fn percent_arrays_collapse_only_when_preferred_and_never_expand() {
+        let source = b"w = ['a', 'b']\ns = [:a, :b]\nk = %w[c d]\n";
+        let preserve = FormatOptions {
+            percent_arrays: crate::options::PercentArrays::Preserve,
+            ..FormatOptions::default()
+        };
+        assert_eq!(
+            format_with_options(source, &preserve).expect("valid Ruby"),
+            "w = ['a', 'b']\ns = [:a, :b]\nk = %w[c d]\n"
+        );
+        let prefer = FormatOptions {
+            percent_arrays: crate::options::PercentArrays::Prefer,
+            ..FormatOptions::default()
+        };
+        assert_eq!(
+            format_with_options(source, &prefer).expect("valid Ruby"),
+            "w = %w[a b]\ns = %i[a b]\nk = %w[c d]\n"
+        );
+    }
+
+    #[test]
     fn supports_collection_and_literal_policies() {
         let options = FormatOptions {
             line_width: 8,
             trailing_commas: false,
-            prefer_percent_arrays: false,
+            percent_arrays: crate::options::PercentArrays::Preserve,
             normalize_number_separators: false,
             ..FormatOptions::default()
         };

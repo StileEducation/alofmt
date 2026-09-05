@@ -91,6 +91,12 @@ pub fn array_node(f: &mut Formatter<'_>, node: &ArrayNode<'_>) {
     };
     let opening = f.slice(&opening);
     if opening.starts_with('%') {
+        if f.options.percent_arrays == crate::options::PercentArrays::Avoid
+            && let Some(words) = bracket_words(f, node, opening)
+        {
+            bracket_array(f, node, &words);
+            return;
+        }
         percent_array(f, node, opening);
         return;
     }
@@ -98,7 +104,7 @@ pub fn array_node(f: &mut Formatter<'_>, node: &ArrayNode<'_>) {
         empty_container(f, "[", "]", &node.as_node());
         return;
     }
-    if f.options.prefer_percent_arrays
+    if f.options.percent_arrays == crate::options::PercentArrays::Prefer
         && let Some(kind) = percent_kind(f, node)
     {
         percent_array(f, node, kind);
@@ -166,6 +172,73 @@ fn percent_kind(f: &Formatter<'_>, node: &ArrayNode<'_>) -> Option<&'static str>
         return Some("%i");
     }
     None
+}
+
+/// One element of a `%w` or `%i` literal spelled for a bracketed array.
+enum Word {
+    Quoted(char, String),
+    Symbol(String),
+    QuotedSymbol(char, String),
+}
+
+/// The bracketed spelling of a `%w` or `%i` literal, or `None` when the
+/// literal interpolates or holds a word neither string delimiter can carry
+/// verbatim.
+fn bracket_words(f: &Formatter<'_>, node: &ArrayNode<'_>, opening: &str) -> Option<Vec<Word>> {
+    let kind = opening.get(..2)?;
+    if kind != "%w" && kind != "%i" {
+        return None;
+    }
+    node.elements()
+        .iter()
+        .map(|element| {
+            if kind == "%w" {
+                let content = f.slice(&element.as_string_node()?.content_loc());
+                let quote = strings::word_quote(f, content)?;
+                return Some(Word::Quoted(quote, content.to_owned()));
+            }
+            let value = f.slice(&element.as_symbol_node()?.value_loc()?);
+            if strings::is_bare_symbol(value) {
+                return Some(Word::Symbol(value.to_owned()));
+            }
+            Some(Word::QuotedSymbol(strings::word_quote(f, value)?, value.to_owned()))
+        })
+        .collect()
+}
+
+/// A `%w` or `%i` literal printed as the bracketed array it spells.
+fn bracket_array(f: &mut Formatter<'_>, node: &ArrayNode<'_>, words: &[Word]) {
+    if words.is_empty() {
+        empty_container(f, "[", "]", &node.as_node());
+        return;
+    }
+    f.group(|f| {
+        f.b.text("[");
+        f.indent(|f| {
+            f.b.line(SOFT);
+            for (index, word) in words.iter().enumerate() {
+                if index > 0 {
+                    f.b.text(",");
+                    f.b.line(SPACE);
+                }
+                match word {
+                    Word::Quoted(quote, content) => strings::quoted_word(f, *quote, content),
+                    Word::Symbol(value) => {
+                        f.b.text(":");
+                        f.b.text(value.clone());
+                    }
+                    Word::QuotedSymbol(quote, value) => {
+                        f.b.text(":");
+                        strings::quoted_word(f, *quote, value);
+                    }
+                }
+            }
+            trailing_comma(f);
+            dangling_lines(f, &node.as_node());
+        });
+        f.b.line(SOFT);
+        f.b.text("]");
+    });
 }
 
 /// `%w[]`-style arrays: one word per line when broken, never a comma, and

@@ -76,9 +76,9 @@ struct StyleOptions {
     #[arg(long, value_name = "BOOL", num_args = 0..=1, require_equals = true, default_missing_value = "true")]
     trailing_commas: Option<bool>,
 
-    /// Convert eligible arrays to `%w` and `%i` literals.
-    #[arg(long, value_name = "BOOL", num_args = 0..=1, require_equals = true, default_missing_value = "true")]
-    prefer_percent_arrays: Option<bool>,
+    /// Whether an array of single-word strings or symbols collapses to `%w` or `%i`.
+    #[arg(long, value_enum)]
+    percent_arrays: Option<PercentArrays>,
 
     /// Add thousands separators to eligible decimal integers.
     #[arg(long, value_name = "BOOL", num_args = 0..=1, require_equals = true, default_missing_value = "true")]
@@ -147,6 +147,13 @@ enum MultilineAssignmentLayout {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
+enum PercentArrays {
+    Prefer,
+    Preserve,
+    Avoid,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum QuoteStyle {
     Single,
     Double,
@@ -159,7 +166,6 @@ impl StyleOptions {
         set_if_some(&mut options.indent_width, self.indent_width);
         set_if_some(&mut options.fit_indent_width, self.fit_indent_width);
         set_if_some(&mut options.trailing_commas, self.trailing_commas);
-        set_if_some(&mut options.prefer_percent_arrays, self.prefer_percent_arrays);
         set_if_some(
             &mut options.normalize_number_separators,
             self.normalize_number_separators,
@@ -188,6 +194,13 @@ impl StyleOptions {
                 QuoteStyle::Single => alofmt::QuoteStyle::Single,
                 QuoteStyle::Double => alofmt::QuoteStyle::Double,
                 QuoteStyle::Preserve => alofmt::QuoteStyle::Preserve,
+            };
+        }
+        if let Some(mode) = self.percent_arrays {
+            options.percent_arrays = match mode {
+                PercentArrays::Prefer => alofmt::PercentArrays::Prefer,
+                PercentArrays::Preserve => alofmt::PercentArrays::Preserve,
+                PercentArrays::Avoid => alofmt::PercentArrays::Avoid,
             };
         }
         replace_list(
