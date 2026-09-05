@@ -734,6 +734,15 @@ mod tests {
     }
 
     #[test]
+    fn comments_between_a_pairs_key_and_value_move_the_value_down() {
+        let source = b"foo(\n  bounds: # why\n  # more\n  Bar.new(a: 1),\n  other: # only here\n  { a: 1 },\n  plain: Baz.new,\n)\n";
+        assert_eq!(
+            format(source).expect("valid Ruby"),
+            "foo(\n  bounds: # why\n    # more\n    Bar.new(a: 1),\n  other: # only here\n    { a: 1 },\n  plain: Baz.new\n)\n"
+        );
+    }
+
+    #[test]
     fn avoiding_percent_arrays_spells_them_out_where_the_words_allow() {
         let avoid = FormatOptions {
             percent_arrays: crate::options::PercentArrays::Avoid,

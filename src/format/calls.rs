@@ -311,25 +311,32 @@ pub fn assoc_node(f: &mut Formatter<'_>, node: &AssocNode<'_>) {
             f.b.text(" =>");
         }
     };
+    // `k: # c` and own-line comments before the value both move the value
+    // down: the key's comment ends its line and the value's precede it.
+    let headed = std::mem::take(&mut f.header_break);
+    let commented = headed || f.attached_len(&value, AttachedSlot::Leading) > 0;
     match &value {
         Node::ImplicitNode { .. } => key(f),
-        Node::HashNode { .. } => {
+        Node::HashNode { .. } if !commented => {
             key(f);
             f.b.text(" ");
             hash_contents(f, &value.as_hash_node().expect("kind"));
         }
-        _ if assign::stays_inline(f, &value) => {
+        _ if !commented && assign::stays_inline(f, &value) => {
             key(f);
             f.b.text(" ");
             f.node(&value);
         }
-        _ => f.group(|f| {
-            key(f);
-            f.indent(|f| {
-                f.b.line(SPACE);
-                f.node(&value);
+        _ => {
+            f.header_break = commented;
+            f.group(|f| {
+                key(f);
+                f.indent(|f| {
+                    f.b.line(SPACE);
+                    f.node(&value);
+                });
             });
-        }),
+        }
     }
 }
 
