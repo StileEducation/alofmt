@@ -733,6 +733,58 @@ mod tests {
         );
     }
 
+    #[test]
+    fn block_delimiters_choose_between_braces_and_do_end_where_both_parse() {
+        use crate::options::BlockDelimiters;
+        let fits = b"a.map { |v| v }\nb.map do |v|\n  v\nend\n";
+        let breaks = b"a.map do |v|\n  first_long_call(v)\n  second_long_call(v)\nend\n";
+        // A block on a paren-less command keeps do/end: braces would bind to the argument.
+        let command = b"expect x do |v|\n  v\nend\n";
+        let with = |delimiters: BlockDelimiters, source: &[u8]| {
+            let options = FormatOptions {
+                block_delimiters: delimiters,
+                ..FormatOptions::default()
+            };
+            format_with_options(source, &options).expect("valid Ruby")
+        };
+        assert_eq!(
+            with(BlockDelimiters::LineCountBased, fits),
+            "a.map { |v| v }\nb.map { |v| v }\n"
+        );
+        assert_eq!(
+            with(BlockDelimiters::LineCountBased, breaks),
+            "a.map do |v|\n  first_long_call(v)\n  second_long_call(v)\nend\n"
+        );
+        assert_eq!(
+            with(BlockDelimiters::AlwaysBraces, fits),
+            "a.map { |v| v }\nb.map { |v| v }\n"
+        );
+        assert_eq!(
+            with(BlockDelimiters::AlwaysBraces, breaks),
+            "a.map { |v|\n  first_long_call(v)\n  second_long_call(v)\n}\n"
+        );
+        assert_eq!(
+            with(BlockDelimiters::AlwaysDoEnd, fits),
+            "a.map do |v|\n  v\nend\nb.map do |v|\n  v\nend\n"
+        );
+        assert_eq!(
+            with(BlockDelimiters::Preserve, fits),
+            "a.map { |v| v }\nb.map do |v| v end\n"
+        );
+        for delimiters in [
+            BlockDelimiters::LineCountBased,
+            BlockDelimiters::AlwaysBraces,
+            BlockDelimiters::AlwaysDoEnd,
+            BlockDelimiters::Preserve,
+        ] {
+            assert_eq!(
+                with(delimiters, command),
+                "expect x do |v|\n  v\nend\n",
+                "{delimiters:?}"
+            );
+        }
+    }
+
     /// Formatting once must reach the fixpoint: the layout rules that treat a
     /// bracketed array specially see the array as it prints, not as written.
     #[test]

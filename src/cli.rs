@@ -132,6 +132,18 @@ struct StyleOptions {
     /// Where the value of an assignment that cannot fit on one line goes.
     #[arg(long, value_enum)]
     multiline_assignment_layout: Option<MultilineAssignmentLayout>,
+
+    /// Which delimiters a block prints with, where either would parse the same.
+    #[arg(long, value_enum)]
+    block_delimiters: Option<BlockDelimiters>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum BlockDelimiters {
+    LineCountBased,
+    AlwaysBraces,
+    AlwaysDoEnd,
+    Preserve,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -201,6 +213,14 @@ impl StyleOptions {
                 PercentArrays::Prefer => alofmt::PercentArrays::Prefer,
                 PercentArrays::Preserve => alofmt::PercentArrays::Preserve,
                 PercentArrays::Avoid => alofmt::PercentArrays::Avoid,
+            };
+        }
+        if let Some(delimiters) = self.block_delimiters {
+            options.block_delimiters = match delimiters {
+                BlockDelimiters::LineCountBased => alofmt::BlockDelimiters::LineCountBased,
+                BlockDelimiters::AlwaysBraces => alofmt::BlockDelimiters::AlwaysBraces,
+                BlockDelimiters::AlwaysDoEnd => alofmt::BlockDelimiters::AlwaysDoEnd,
+                BlockDelimiters::Preserve => alofmt::BlockDelimiters::Preserve,
             };
         }
         replace_list(

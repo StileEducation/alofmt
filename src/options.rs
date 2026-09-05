@@ -44,6 +44,8 @@ pub struct FormatOptions {
     pub delimited_argument_alignment: DelimitedArgumentAlignment,
     /// Where the value of an assignment that cannot fit on one line goes.
     pub multiline_assignment_layout: MultilineAssignmentLayout,
+    /// Which delimiters a block prints with, where either would parse the same.
+    pub block_delimiters: BlockDelimiters,
 }
 
 impl Default for FormatOptions {
@@ -65,8 +67,26 @@ impl Default for FormatOptions {
             max_command_alignment: 40,
             delimited_argument_alignment: DelimitedArgumentAlignment::Aligned,
             multiline_assignment_layout: MultilineAssignmentLayout::NewLine,
+            block_delimiters: BlockDelimiters::LineCountBased,
         }
     }
+}
+
+/// Which delimiters a block prints with. A block whose delimiters change what
+/// it binds to, inside a paren-less command call or a conditional's predicate,
+/// keeps the delimiters that preserve its meaning whatever the setting.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockDelimiters {
+    /// `{ }` when the block fits on one line, `do`/`end` when it breaks.
+    #[default]
+    LineCountBased,
+    /// `{ }` whether the block fits or breaks.
+    AlwaysBraces,
+    /// `do`/`end` on its own lines, even for a block that would fit.
+    AlwaysDoEnd,
+    /// The source's delimiters, flat or broken as the block fits.
+    Preserve,
 }
 
 impl FormatOptions {
@@ -180,6 +200,7 @@ mod tests {
             DelimitedArgumentAlignment::Aligned
         );
         assert_eq!(options.multiline_assignment_layout, MultilineAssignmentLayout::NewLine);
+        assert_eq!(options.block_delimiters, BlockDelimiters::LineCountBased);
     }
 
     #[test]
@@ -218,6 +239,7 @@ mod tests {
                 line_width = 100
                 quote_style = "single"
                 percent_arrays = "prefer"
+                block_delimiters = "always_braces"
                 compact_chain_blocks = ["typed"]
             "#,
         )
@@ -227,6 +249,7 @@ mod tests {
         assert_eq!(options.indent_width, 2);
         assert_eq!(options.quote_style, QuoteStyle::Single);
         assert_eq!(options.percent_arrays, PercentArrays::Prefer);
+        assert_eq!(options.block_delimiters, BlockDelimiters::AlwaysBraces);
         assert_eq!(options.compact_chain_blocks, ["typed"]);
     }
 

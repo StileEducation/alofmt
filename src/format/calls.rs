@@ -405,8 +405,11 @@ pub fn block_node(f: &mut Formatter<'_>, node: &BlockNode<'_>) {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BlockStyle {
-    /// `{ }` when it fits on one line, `do`/`end` otherwise.
+    /// Either delimiter parses the same, so [`FormatOptions::block_delimiters`]
+    /// chooses: by default `{ }` when it fits on one line, `do`/`end` otherwise.
     Braces,
+    /// `{ }` flat or broken.
+    FixedBraces,
     /// `do`/`end` even on one line (a block on `super` with arguments).
     Keywords,
     /// Always broken `do`/`end` (a block on a paren-less command call).
@@ -426,16 +429,26 @@ fn block(f: &mut Formatter<'_>, node: &BlockNode<'_>, style: BlockStyle) {
     let style = match style {
         BlockStyle::Braces if f.calls.in_predicate => BlockStyle::Predicate,
         BlockStyle::Braces if f.calls.in_command => BlockStyle::Source,
+        BlockStyle::Braces => match f.options.block_delimiters {
+            crate::options::BlockDelimiters::LineCountBased => BlockStyle::Braces,
+            crate::options::BlockDelimiters::AlwaysBraces => BlockStyle::FixedBraces,
+            crate::options::BlockDelimiters::AlwaysDoEnd => BlockStyle::ForcedDo,
+            crate::options::BlockDelimiters::Preserve => BlockStyle::Source,
+        },
         style => style,
     };
     let keywords = match style {
         BlockStyle::Keywords => true,
         BlockStyle::Source | BlockStyle::ForcedSource => f.slice(&node.opening_loc()) == "do",
-        BlockStyle::Braces | BlockStyle::ForcedDo | BlockStyle::Predicate => false,
+        BlockStyle::Braces | BlockStyle::FixedBraces | BlockStyle::ForcedDo | BlockStyle::Predicate => false,
     };
     let fixed = matches!(
         style,
-        BlockStyle::Keywords | BlockStyle::Source | BlockStyle::ForcedSource | BlockStyle::Predicate
+        BlockStyle::Keywords
+            | BlockStyle::FixedBraces
+            | BlockStyle::Source
+            | BlockStyle::ForcedSource
+            | BlockStyle::Predicate
     );
     f.b.text(" ");
     f.group(|f| {

@@ -21,6 +21,7 @@ Every field is optional.
 | `fit_indent_width` | `2` | Indentation width used while measuring whether a group fits. |
 | `quote_style` | `"preserve"` | Plain string and symbol delimiters: `single`, `double`, or `preserve`. |
 | `trailing_commas` | `false` | Add trailing commas to broken collections and argument lists. |
+| `block_delimiters` | `"line_count_based"` | Block delimiters where either parses the same: `line_count_based` uses `{ }` when the block fits and `do`/`end` when it breaks, `always_braces` and `always_do_end` fix one, `preserve` keeps the source's. |
 | `percent_arrays` | `"preserve"` | Arrays of single-word strings or symbols: `prefer` collapses bracketed ones to `%w` and `%i`, `avoid` rewrites `%w` and `%i` literals as bracketed arrays, `preserve` keeps every array as written. |
 | `normalize_number_separators` | `false` | Add thousands separators to eligible decimal integers. |
 | `explicit_standard_error` | `false` | Spell an omitted rescue class as `StandardError`. |
