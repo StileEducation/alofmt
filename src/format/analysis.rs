@@ -128,16 +128,12 @@ impl<'pr> Visit<'pr> for Walk<'_, 'pr> {
         if let Some(superclass) = node.superclass() {
             self.visit(&superclass);
         }
-        self.with_scope(true, node.locals().iter(), |walk| {
-            walk.with_frame(Position::CLASS_BODY, |walk| walk.body(node.body(), true));
-        });
+        self.class_body(node.locals().iter(), node.body());
     }
 
     fn visit_module_node(&mut self, node: &ModuleNode<'pr>) {
         self.visit(&node.constant_path());
-        self.with_scope(true, node.locals().iter(), |walk| {
-            walk.with_frame(Position::CLASS_BODY, |walk| walk.body(node.body(), true));
-        });
+        self.class_body(node.locals().iter(), node.body());
     }
 
     fn visit_singleton_class_node(&mut self, node: &SingletonClassNode<'pr>) {
@@ -390,6 +386,13 @@ impl<'pr> Walk<'_, 'pr> {
         } else {
             self.visit(&body);
         }
+    }
+
+    /// A class or module body: a closed scope and a member frame of its own.
+    fn class_body(&mut self, locals: impl Iterator<Item = ruby_prism::ConstantId<'pr>>, body: Option<Node<'pr>>) {
+        self.with_scope(true, locals, |walk| {
+            walk.with_frame(Position::CLASS_BODY, |walk| walk.body(body, true));
+        });
     }
 
     fn with_frame(&mut self, position: Position, body: impl FnOnce(&mut Self)) {

@@ -145,7 +145,7 @@ fn kind_of(node: &Node<'_>) -> Kind {
     }
 }
 
-fn span_of(node: &Node<'_>) -> (usize, usize) {
+pub(super) fn span_of(node: &Node<'_>) -> (usize, usize) {
     let loc = node.location();
     (loc.start_offset(), loc.end_offset())
 }

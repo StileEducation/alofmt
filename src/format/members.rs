@@ -15,6 +15,7 @@
 use ruby_prism::{CallNode, Node};
 use rustc_hash::FxHashSet as HashSet;
 
+use super::control::span_of;
 use crate::FormatOptions;
 use crate::options::{MethodCallParentheses, RedundantSelf};
 
@@ -328,14 +329,11 @@ fn is_member_candidate(node: &CallNode<'_>) -> bool {
     receiver_is_self
         && node.message_loc().is_some()
         && !node.is_attribute_write()
-        && node
-            .name()
-            .as_slice()
-            .first()
-            .is_some_and(|byte| byte.is_ascii_lowercase() || *byte == b'_' || !byte.is_ascii())
+        && identifier_name(node.name().as_slice())
 }
 
-fn span_of(node: &Node<'_>) -> (usize, usize) {
-    let location = node.location();
-    (location.start_offset(), location.end_offset())
+/// A plain method name: not a constant-like `Integer`, and not an operator.
+pub(super) fn identifier_name(name: &[u8]) -> bool {
+    name.first()
+        .is_some_and(|byte| byte.is_ascii_lowercase() || *byte == b'_' || !byte.is_ascii())
 }

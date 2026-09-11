@@ -11,6 +11,7 @@ use ruby_prism::{
     YieldNode,
 };
 
+use super::members::identifier_name;
 use super::{AttachedSlot, Formatter, assign, strings};
 use crate::comments::Comment;
 use crate::doc::{Builder, Doc, Fragment, HARD, SOFT, SPACE};
@@ -860,7 +861,14 @@ fn method_call(f: &mut Formatter<'_>, node: &CallNode<'_>) {
         // capture any `do` block among its arguments.
         f.group(|f| {
             receiver_and_name(f, node);
-            optional_paren_args(f, arguments.as_ref(), block_argument.as_ref());
+            wrapped_arguments(
+                f,
+                None,
+                arguments.as_ref(),
+                block_argument.as_ref(),
+                Parens::Optional,
+                true,
+            );
         });
     } else if command {
         // The receiver shares the arguments' group: a receiver forced onto
@@ -1029,42 +1037,72 @@ pub(super) fn parenthesised(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
     if !matches!(shape(f, node), Shape::Method) {
         return written;
     }
+    let name = node.name().as_slice();
+    // Spelled bare, the name would read as a constant, a local variable or
+    // the `.()` shorthand.
+    let bare_reads_differently = !identifier_name(name) || node.message_loc().is_none() || f.members.is_shadowed(node);
     let has_arguments = node.arguments().is_some() || matches!(node.block(), Some(Node::BlockArgumentNode { .. }));
-    let policy = if has_arguments {
-        f.options.method_call_with_args_parentheses
-    } else {
-        f.options.method_call_without_args_parentheses
-    };
-    match (written, policy) {
-        (true, MethodCallParentheses::OmitParentheses) => !omittable_parentheses(f, node, has_arguments),
+    if has_arguments {
+        let exempt = Exempt {
+            require: policy_exempt(f, node),
+            omit: bare_reads_differently || allowed_method(f, name),
+        };
+        return arguments_parenthesised(
+            f,
+            &node.as_node(),
+            written,
+            exempt,
+            node.arguments().as_ref(),
+            node.block(),
+        );
+    }
+    match (written, f.options.method_call_without_args_parentheses) {
+        (true, MethodCallParentheses::OmitParentheses) => {
+            bare_reads_differently || allowed_method(f, name) || f.has_dangling(&node.as_node())
+        }
         (true, _) => true,
         (false, MethodCallParentheses::RequireParentheses) => {
-            !policy_exempt(f, node) && (has_arguments || (node.block().is_none() && f.members.is_member_call(node)))
+            !policy_exempt(f, node) && node.block().is_none() && f.members.is_member_call(node)
         }
         (false, _) => false,
     }
 }
 
-/// Whether written parentheses can go: the bare call must parse the same,
-/// and no comment may sit inside them.
-fn omittable_parentheses(f: &Formatter<'_>, node: &CallNode<'_>, has_arguments: bool) -> bool {
-    let name = node.name().as_slice();
-    if !identifier_name(name)
-        || node.message_loc().is_none()
-        || allowed_method(f, name)
-        || f.has_dangling(&node.as_node())
-        || f.members.is_shadowed(node)
-    {
-        return false;
+/// The owner-specific reasons to leave an argument list as written, one
+/// per policy value: a call in macro position is exempt from `require`; a
+/// call whose bare name would read differently is exempt from `omit`.
+struct Exempt {
+    require: bool,
+    omit: bool,
+}
+
+/// Whether the arguments of a call, `super` or `yield` are printed in
+/// parentheses under `method_call_with_args_parentheses`. Written
+/// parentheses go only in tail position, with no block on the owner or
+/// among its arguments, no comment inside them, and no argument that needs
+/// them (see [`arguments_need_parentheses`]).
+fn arguments_parenthesised(
+    f: &Formatter<'_>,
+    owner: &Node<'_>,
+    written: bool,
+    exempt: Exempt,
+    arguments: Option<&ArgumentsNode<'_>>,
+    block: Option<Node<'_>>,
+) -> bool {
+    match (written, f.options.method_call_with_args_parentheses) {
+        (true, MethodCallParentheses::OmitParentheses) => {
+            let (block_node, block_argument) = split_block(block);
+            exempt.omit
+                || block_node.is_some()
+                || f.has_dangling(owner)
+                || !f.members.in_tail_position(owner)
+                || f.members.arguments_contain_block(owner)
+                || arguments_need_parentheses(f, arguments, block_argument.as_ref())
+        }
+        (true, _) => true,
+        (false, MethodCallParentheses::RequireParentheses) => !exempt.require,
+        (false, _) => false,
     }
-    if !has_arguments {
-        return true;
-    }
-    let (block_node, block_argument) = split_block(node.block());
-    f.members.in_tail_position(&node.as_node())
-        && block_node.is_none()
-        && !f.members.arguments_contain_block(&node.as_node())
-        && !arguments_need_parentheses(f, node.arguments().as_ref(), block_argument.as_ref())
 }
 
 /// Arguments that only parse as intended inside parentheses: a first
@@ -1197,12 +1235,6 @@ const RUBY_KEYWORDS: [&[u8]; 41] = [
     b"yield",
 ];
 
-/// A plain method name: not a constant-like `Integer`, and not an operator.
-fn identifier_name(name: &[u8]) -> bool {
-    name.first()
-        .is_some_and(|byte| byte.is_ascii_lowercase() || *byte == b'_' || !byte.is_ascii())
-}
-
 /// A call exempt from the policies: a configured allowed method, or a call
 /// in macro position.
 fn policy_exempt(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
@@ -1214,35 +1246,6 @@ fn allowed_method(f: &Formatter<'_>, name: &[u8]) -> bool {
         .allowed_methods
         .iter()
         .any(|allowed| allowed.as_bytes() == name)
-}
-
-/// Whether `super a, b` or `yield a, b` is printed with parentheses: as
-/// written, or as the with-arguments policy decides. Either keyword can be
-/// listed in `allowed_methods`.
-fn keyword_parenthesised(
-    f: &Formatter<'_>,
-    node: &Node<'_>,
-    keyword: &[u8],
-    written: bool,
-    arguments: Option<&ArgumentsNode<'_>>,
-    block: Option<Node<'_>>,
-) -> bool {
-    if allowed_method(f, keyword) {
-        return written;
-    }
-    let (block_node, block_argument) = split_block(block);
-    match (written, f.options.method_call_with_args_parentheses) {
-        (true, MethodCallParentheses::OmitParentheses) => {
-            !(f.members.in_tail_position(node)
-                && block_node.is_none()
-                && !f.members.arguments_contain_block(node)
-                && !f.has_dangling(node)
-                && !arguments_need_parentheses(f, arguments, block_argument.as_ref()))
-        }
-        (true, _) => true,
-        (false, MethodCallParentheses::RequireParentheses) => true,
-        (false, _) => false,
-    }
 }
 
 /// Builds `build`'s docs, keeps them, and reports the width of the text after
@@ -1424,15 +1427,44 @@ fn paren_args(
         f.b.text("()");
         return;
     }
-    f.group(|f| {
-        f.b.text("(");
-        f.indent(|f| {
-            f.b.line(SOFT);
-            in_command(f, false, |f| argument_list(f, arguments, block_argument));
-            if block_argument.is_none() && arguments.is_some_and(|a| allows_trailing_comma(f, a)) {
-                trailing_comma(f);
-            }
-            // Own-line comments after the last argument dangle on the call.
+    f.group(|f| wrapped_arguments(f, Some(owner), arguments, block_argument, Parens::Fixed, true));
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Parens {
+    /// `(a, b)` flat and broken alike.
+    Fixed,
+    /// ` a, b` flat; `(\n  a,\n  b\n)` broken, so a `do` block among the
+    /// arguments never lands in a multiline command call.
+    Optional,
+}
+
+/// An argument list inside its parentheses, one argument per line when
+/// broken, with a trailing comma after the last when `trailing` allows one.
+/// Own-line comments after the last argument dangle on `owner`; a caller
+/// that passes none has checked there are none. The caller supplies the
+/// group and has printed the name.
+fn wrapped_arguments(
+    f: &mut Formatter<'_>,
+    owner: Option<&Node<'_>>,
+    arguments: Option<&ArgumentsNode<'_>>,
+    block_argument: Option<&Node<'_>>,
+    parens: Parens,
+    trailing: bool,
+) {
+    match parens {
+        Parens::Fixed => f.b.text("("),
+        Parens::Optional => f.if_break(|f| f.b.text("("), |f| f.b.text(" ")),
+    }
+    f.indent(|f| {
+        f.b.line(SOFT);
+        in_command(f, parens == Parens::Optional, |f| {
+            argument_list(f, arguments, block_argument)
+        });
+        if trailing && block_argument.is_none() && arguments.is_some_and(|a| allows_trailing_comma(f, a)) {
+            trailing_comma(f);
+        }
+        if let Some(owner) = owner {
             let opening = owner
                 .as_call_node()
                 .and_then(|c| c.opening_loc())
@@ -1442,29 +1474,13 @@ fn paren_args(
                 f.b.line(HARD);
                 comment_lines(f, &comments);
             }
-        });
-        f.b.line(SOFT);
-        f.b.text(")");
-    });
-}
-
-/// ` a, b` when flat, `(\n  a,\n  b\n)` when broken. The caller supplies the
-/// group and has printed the name; the arguments have no dangling comments.
-fn optional_paren_args(
-    f: &mut Formatter<'_>,
-    arguments: Option<&ArgumentsNode<'_>>,
-    block_argument: Option<&Node<'_>>,
-) {
-    f.if_break(|f| f.b.text("("), |f| f.b.text(" "));
-    f.indent(|f| {
-        f.b.line(SOFT);
-        in_command(f, true, |f| argument_list(f, arguments, block_argument));
-        if block_argument.is_none() && arguments.is_some_and(|a| allows_trailing_comma(f, a)) {
-            trailing_comma(f);
         }
     });
     f.b.line(SOFT);
-    f.if_break(|f| f.b.text(")"), |_| {});
+    match parens {
+        Parens::Fixed => f.b.text(")"),
+        Parens::Optional => f.if_break(|f| f.b.text(")"), |_| {}),
+    }
 }
 
 /// Omits a trailing comma after `...` or a command call (`foo(bar baz)`).
@@ -1610,25 +1626,36 @@ pub fn super_node(f: &mut Formatter<'_>, node: &SuperNode<'_>) {
     f.b.text("super");
     let (block_node, block_argument) = split_block(node.block());
     let arguments = node.arguments();
+    let written = node.lparen_loc().is_some();
+    let has_arguments = arguments.is_some() || block_argument.is_some();
     // Bare `super` forwards the caller's arguments and `super()` passes
     // none: only a `super` with arguments follows the policy.
-    let parenthesised = if arguments.is_some() || block_argument.is_some() {
-        keyword_parenthesised(
+    let parenthesised = if has_arguments {
+        arguments_parenthesised(
             f,
             &node.as_node(),
-            b"super",
-            node.lparen_loc().is_some(),
+            written,
+            keyword_exempt(f, b"super"),
             arguments.as_ref(),
             node.block(),
         )
     } else {
-        node.lparen_loc().is_some()
+        written
     };
     if parenthesised {
         paren_args(f, &node.as_node(), arguments.as_ref(), block_argument.as_ref());
-    } else if node.lparen_loc().is_some() {
-        f.group(|f| optional_paren_args(f, arguments.as_ref(), block_argument.as_ref()));
-    } else if arguments.is_some() || block_argument.is_some() {
+    } else if written {
+        f.group(|f| {
+            wrapped_arguments(
+                f,
+                None,
+                arguments.as_ref(),
+                block_argument.as_ref(),
+                Parens::Optional,
+                true,
+            )
+        });
+    } else if has_arguments {
         f.group(|f| {
             f.b.text(" ");
             command_args(f, arguments.as_ref(), block_argument.as_ref(), "super ".len());
@@ -1654,29 +1681,23 @@ pub fn yield_node(f: &mut Formatter<'_>, node: &YieldNode<'_>) {
         }
         return;
     };
-    let parenthesised = keyword_parenthesised(
+    let parenthesised = arguments_parenthesised(
         f,
         &node.as_node(),
-        b"yield",
         node.lparen_loc().is_some(),
+        keyword_exempt(f, b"yield"),
         Some(&arguments),
         None,
     );
-    f.group(|f| {
-        if parenthesised {
-            f.b.text("(");
-        } else {
-            f.if_break(|f| f.b.text("("), |f| f.b.text(" "));
-        }
-        f.indent(|f| {
-            f.b.line(SOFT);
-            argument_list(f, Some(&arguments), None);
-        });
-        f.b.line(SOFT);
-        if parenthesised {
-            f.b.text(")");
-        } else {
-            f.if_break(|f| f.b.text(")"), |_| {});
-        }
-    });
+    let parens = if parenthesised { Parens::Fixed } else { Parens::Optional };
+    f.group(|f| wrapped_arguments(f, None, Some(&arguments), None, parens, false));
+}
+
+/// `super` and `yield` are exempt from both policy values only by name.
+fn keyword_exempt(f: &Formatter<'_>, keyword: &[u8]) -> Exempt {
+    let allowed = allowed_method(f, keyword);
+    Exempt {
+        require: allowed,
+        omit: allowed,
+    }
 }
