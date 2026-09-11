@@ -1,0 +1,4 @@
+method_call_with_args_parentheses = "omit_parentheses"
+method_call_without_args_parentheses = "omit_parentheses"
+redundant_self = "omit_self"
+allowed_methods = ["expect"]

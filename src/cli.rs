@@ -136,6 +136,48 @@ struct StyleOptions {
     /// Which delimiters a block prints with, where either would parse the same.
     #[arg(long, value_enum)]
     block_delimiters: Option<BlockDelimiters>,
+
+    /// Whether the arguments of a call are printed in parentheses.
+    #[arg(long, value_enum)]
+    method_call_with_args_parentheses: Option<MethodCallParentheses>,
+
+    /// Whether a member call with no arguments is printed with `()`.
+    #[arg(long, value_enum)]
+    method_call_without_args_parentheses: Option<MethodCallParentheses>,
+
+    /// Whether a member call is printed with an explicit `self.` receiver.
+    #[arg(long, value_enum)]
+    redundant_self: Option<RedundantSelf>,
+
+    /// Replace the configured allowed methods with this repeatable value.
+    #[arg(long = "allowed-method", value_name = "METHOD")]
+    allowed_methods: Vec<String>,
+
+    /// Disable allowed-method exemptions.
+    #[arg(long, conflicts_with = "allowed_methods")]
+    no_allowed_methods: bool,
+
+    /// Replace the configured member macros with this repeatable value.
+    #[arg(long = "member-macro", value_name = "METHOD")]
+    member_macros: Vec<String>,
+
+    /// Take members from `def` and `alias` only.
+    #[arg(long, conflicts_with = "member_macros")]
+    no_member_macros: bool,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum MethodCallParentheses {
+    Preserve,
+    RequireParentheses,
+    OmitParentheses,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum RedundantSelf {
+    Preserve,
+    RequireSelf,
+    OmitSelf,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -223,11 +265,30 @@ impl StyleOptions {
                 BlockDelimiters::Preserve => alofmt::BlockDelimiters::Preserve,
             };
         }
+        if let Some(policy) = self.method_call_with_args_parentheses {
+            options.method_call_with_args_parentheses = convert_parentheses(policy);
+        }
+        if let Some(policy) = self.method_call_without_args_parentheses {
+            options.method_call_without_args_parentheses = convert_parentheses(policy);
+        }
+        if let Some(policy) = self.redundant_self {
+            options.redundant_self = match policy {
+                RedundantSelf::Preserve => alofmt::RedundantSelf::Preserve,
+                RedundantSelf::RequireSelf => alofmt::RedundantSelf::RequireSelf,
+                RedundantSelf::OmitSelf => alofmt::RedundantSelf::OmitSelf,
+            };
+        }
         replace_list(
             &mut options.ignore_directives,
             self.ignore_directives,
             self.no_ignore_directives,
         );
+        replace_list(
+            &mut options.allowed_methods,
+            self.allowed_methods,
+            self.no_allowed_methods,
+        );
+        replace_list(&mut options.member_macros, self.member_macros, self.no_member_macros);
         replace_list(
             &mut options.compact_chain_blocks,
             self.compact_chain_blocks,
@@ -240,6 +301,14 @@ impl StyleOptions {
         );
         options.validate()?;
         Ok(())
+    }
+}
+
+fn convert_parentheses(policy: MethodCallParentheses) -> alofmt::MethodCallParentheses {
+    match policy {
+        MethodCallParentheses::Preserve => alofmt::MethodCallParentheses::Preserve,
+        MethodCallParentheses::RequireParentheses => alofmt::MethodCallParentheses::RequireParentheses,
+        MethodCallParentheses::OmitParentheses => alofmt::MethodCallParentheses::OmitParentheses,
     }
 }
 

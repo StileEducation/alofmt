@@ -54,10 +54,14 @@ pub fn string_node(f: &mut Formatter<'_>, node: &StringNode<'_>) {
     }
 }
 
+/// The source's delimiters around the content. A `?c` character literal
+/// has an opening and no closing.
 fn original_string(f: &mut Formatter<'_>, node: &StringNode<'_>, opening: &Location<'_>, content: &str) {
     f.text_of(opening);
     literal_text(f, content);
-    f.text_of(&node.closing_loc().expect("quoted string has a closing"));
+    if let Some(closing) = node.closing_loc() {
+        f.text_of(&closing);
+    }
 }
 
 fn can_use_quote(content: &str, quote: char) -> bool {

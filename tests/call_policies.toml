@@ -1,0 +1,5 @@
+method_call_with_args_parentheses = "require_parentheses"
+method_call_without_args_parentheses = "require_parentheses"
+redundant_self = "require_self"
+allowed_methods = ["raise", "to", "yield"]
+member_macros = ["attr", "attr_reader", "attr_accessor", "define_method", "const"]

@@ -7,13 +7,13 @@
 //! falls out without special cases. The parent decides whether a converted
 //! form needs parentheses (`x = (b if a)`) and whether an `if`/`else` may
 //! become a ternary at all (never directly inside parentheses); there are no
-//! parent pointers, so one analysis walk records each node's context.
+//! parent pointers, so the analysis walk (see `analysis.rs`) records each
+//! node's context through [`ContextWalk`].
 
 use ruby_prism::{
     AndNode, ArgumentsNode, BeginNode, BreakNode, CallNode, CaseNode, DefinedNode, ElseNode, EnsureNode, FlipFlopNode,
     ForNode, IfNode, Location, NextNode, Node, OrNode, ParenthesesNode, PostExecutionNode, PreExecutionNode, RedoNode,
-    RescueModifierNode, RescueNode, RetryNode, ReturnNode, StatementsNode, UnlessNode, UntilNode, Visit, WhenNode,
-    WhileNode,
+    RescueModifierNode, RescueNode, RetryNode, ReturnNode, StatementsNode, UnlessNode, UntilNode, WhenNode, WhileNode,
 };
 use rustc_hash::FxHashMap as HashMap;
 
@@ -53,59 +53,52 @@ pub struct State {
     spaced_flip_flop: bool,
 }
 
-struct ContextWalk {
+/// The context stack the analysis walk keeps: every node on the path from
+/// the root, with the kinds the context rules ask about.
+pub(super) struct ContextWalk {
     stack: Vec<(Kind, (usize, usize))>,
     contexts: HashMap<(usize, usize), Context>,
     assignment_starts: Vec<usize>,
     node_count: usize,
 }
 
-impl<'pr> Visit<'pr> for ContextWalk {
-    fn visit_branch_node_enter(&mut self, node: Node<'pr>) {
-        self.enter(&node);
-    }
-
-    fn visit_branch_node_leave(&mut self) {
-        self.stack.pop();
-    }
-
-    fn visit_leaf_node_enter(&mut self, node: Node<'pr>) {
-        self.enter(&node);
-    }
-
-    fn visit_leaf_node_leave(&mut self) {
-        self.stack.pop();
-    }
-
-    // Statement lists are statically typed children of most parents, which
-    // the default visitor reaches without the enter/leave hooks.
-    fn visit_statements_node(&mut self, node: &StatementsNode<'pr>) {
-        self.typed(&node.as_node(), |walk| ruby_prism::visit_statements_node(walk, node));
-    }
-
-    fn visit_arguments_node(&mut self, node: &ArgumentsNode<'pr>) {
-        self.typed(&node.as_node(), |walk| ruby_prism::visit_arguments_node(walk, node));
-    }
-
-    fn visit_call_node(&mut self, node: &CallNode<'pr>) {
-        self.typed(&node.as_node(), |walk| ruby_prism::visit_call_node(walk, node));
-    }
-}
-
 impl ContextWalk {
-    fn typed(&mut self, node: &Node<'_>, descend: impl FnOnce(&mut Self)) {
-        let span = span_of(node);
-        let entered = self.stack.last() != Some(&(kind_of(node), span));
+    pub(super) fn new() -> Self {
+        Self {
+            stack: Vec::new(),
+            contexts: HashMap::default(),
+            assignment_starts: Vec::new(),
+            node_count: 0,
+        }
+    }
+
+    pub(super) fn finish(mut self) -> State {
+        self.assignment_starts.sort_unstable();
+        self.assignment_starts.dedup();
+        State {
+            contexts: self.contexts,
+            assignment_starts: self.assignment_starts,
+            node_count: self.node_count,
+            spaced_flip_flop: false,
+        }
+    }
+
+    /// Enters a statically typed child, which the default visitor reaches
+    /// without the enter and leave hooks, unless it is already the top of
+    /// the stack; returns whether it was entered.
+    pub(super) fn enter_typed(&mut self, node: &Node<'_>) -> bool {
+        let entered = self.stack.last() != Some(&(kind_of(node), span_of(node)));
         if entered {
             self.enter(node);
         }
-        descend(self);
-        if entered {
-            self.stack.pop();
-        }
+        entered
     }
 
-    fn enter(&mut self, node: &Node<'_>) {
+    pub(super) fn leave(&mut self) {
+        self.stack.pop();
+    }
+
+    pub(super) fn enter(&mut self, node: &Node<'_>) {
         self.node_count += 1;
         if is_assignment(node) {
             self.assignment_starts.push(node.location().start_offset());
@@ -152,30 +145,12 @@ fn kind_of(node: &Node<'_>) -> Kind {
     }
 }
 
-fn span_of(node: &Node<'_>) -> (usize, usize) {
+pub(super) fn span_of(node: &Node<'_>) -> (usize, usize) {
     let loc = node.location();
     (loc.start_offset(), loc.end_offset())
 }
 
 impl State {
-    pub fn analyze(root: &Node<'_>) -> Self {
-        let mut walk = ContextWalk {
-            stack: Vec::new(),
-            contexts: HashMap::default(),
-            assignment_starts: Vec::new(),
-            node_count: 0,
-        };
-        walk.visit(root);
-        walk.assignment_starts.sort_unstable();
-        walk.assignment_starts.dedup();
-        Self {
-            contexts: walk.contexts,
-            assignment_starts: walk.assignment_starts,
-            node_count: walk.node_count,
-            spaced_flip_flop: false,
-        }
-    }
-
     pub(super) fn node_count(&self) -> usize {
         self.node_count
     }
@@ -232,7 +207,7 @@ fn parenthesized(f: &mut Formatter<'_>, needed: bool, inner: impl FnOnce(&mut Fo
     }
 }
 
-fn is_assignment(node: &Node<'_>) -> bool {
+pub(super) fn is_assignment(node: &Node<'_>) -> bool {
     match node {
         Node::LocalVariableWriteNode { .. }
         | Node::LocalVariableOperatorWriteNode { .. }

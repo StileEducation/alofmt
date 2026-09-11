@@ -11,9 +11,11 @@ use ruby_prism::{
     YieldNode,
 };
 
+use super::members::identifier_name;
 use super::{AttachedSlot, Formatter, assign, strings};
 use crate::comments::Comment;
 use crate::doc::{Builder, Doc, Fragment, HARD, SOFT, SPACE};
+use crate::options::{MethodCallParentheses, RedundantSelf};
 
 /// Layout context inherited from enclosing nodes; lives on the [`Formatter`].
 #[derive(Default)]
@@ -760,19 +762,28 @@ fn call_operator(f: &mut Formatter<'_>, node: &CallNode<'_>) {
 
 /// A member of a dot chain: `.name`, `.name(args)` or `.name { block }`.
 /// Command-style arguments, index and attribute writes end a chain instead.
-fn is_chain_member(node: &CallNode<'_>) -> bool {
+/// Under a `redundant_self` policy, so does a literal `self` receiver:
+/// `self.a.b.c` counts the same as `a.b.c`, whichever spelling the source
+/// has.
+fn is_chain_member(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
     node.receiver().is_some()
         && node.call_operator_loc().is_some()
         && node.message_loc().is_some()
         && !node.is_attribute_write()
-        && !(node.arguments().is_some() && node.opening_loc().is_none())
+        && !(node.arguments().is_some() && !parenthesised(f, node))
+        && !(f.options.redundant_self != RedundantSelf::Preserve
+            && matches!(node.receiver(), Some(Node::SelfNode { .. })))
 }
 
 fn method_call(f: &mut Formatter<'_>, node: &CallNode<'_>) {
-    if is_chain_member(node) {
+    if is_chain_member(f, node) {
         let mut inner: Vec<CallNode<'_>> = Vec::new();
         let mut receiver = node.receiver();
-        while let Some(call) = receiver.as_ref().and_then(Node::as_call_node).filter(is_chain_member) {
+        while let Some(call) = receiver
+            .as_ref()
+            .and_then(Node::as_call_node)
+            .filter(|call| is_chain_member(f, call))
+        {
             receiver = call.receiver();
             inner.push(call);
         }
@@ -807,8 +818,9 @@ fn method_call(f: &mut Formatter<'_>, node: &CallNode<'_>) {
     }
     let (block_node, block_argument) = split_block(node.block());
     let arguments = node.arguments();
-    let command = node.opening_loc().is_none() && (arguments.is_some() || block_argument.is_some());
-    let sole_conditional = command
+    let parenthesised = parenthesised(f, node);
+    let command = !parenthesised && (arguments.is_some() || block_argument.is_some());
+    let sole_conditional = node.opening_loc().is_none()
         && block_argument.is_none()
         && arguments.as_ref().is_some_and(|a| {
             a.arguments().len() == 1
@@ -819,20 +831,44 @@ fn method_call(f: &mut Formatter<'_>, node: &CallNode<'_>) {
         });
     if sole_conditional {
         // `foo a ? b : c` gains parentheses when the ternary has to break
-        // into its keyword form, which prints there without its own.
+        // into its keyword form, which prints there without its own. Under
+        // the parentheses policy it has them flat too.
         let argument = arguments
             .as_ref()
             .and_then(|a| a.arguments().first())
             .expect("checked above");
         f.group(|f| {
             receiver_and_name(f, node);
-            f.if_break(|f| f.b.text("("), |f| f.b.text(" "));
+            if parenthesised {
+                f.b.text("(");
+            } else {
+                f.if_break(|f| f.b.text("("), |f| f.b.text(" "));
+            }
             f.indent(|f| {
                 f.b.line(SOFT);
-                in_command(f, true, |f| f.node(&argument));
+                in_command(f, !parenthesised, |f| f.node(&argument));
             });
             f.b.line(SOFT);
-            f.if_break(|f| f.b.text(")"), |_| {});
+            if parenthesised {
+                f.b.text(")");
+            } else {
+                f.if_break(|f| f.b.text(")"), |_| {});
+            }
+        });
+    } else if command && node.opening_loc().is_some() {
+        // Parentheses dropped by `omit_parentheses` come back when the call
+        // breaks, as `yield a, b` does: a multiline command call would
+        // capture any `do` block among its arguments.
+        f.group(|f| {
+            receiver_and_name(f, node);
+            wrapped_arguments(
+                f,
+                None,
+                arguments.as_ref(),
+                block_argument.as_ref(),
+                Parens::Optional,
+                true,
+            );
         });
     } else if command {
         // The receiver shares the arguments' group: a receiver forced onto
@@ -860,7 +896,7 @@ fn method_call(f: &mut Formatter<'_>, node: &CallNode<'_>) {
         });
     } else {
         receiver_and_name(f, node);
-        if node.opening_loc().is_some() {
+        if parenthesised {
             paren_args(f, &node.as_node(), arguments.as_ref(), block_argument.as_ref());
         }
     }
@@ -925,7 +961,7 @@ fn consistent_sole_argument(
             .arguments()
             .first()
             .and_then(|a| a.as_call_node())
-            .is_some_and(|c| c.opening_loc().is_some() && c.arguments().is_some()),
+            .is_some_and(|c| parenthesised(f, &c) && c.arguments().is_some()),
         _ => false,
     }
 }
@@ -954,7 +990,7 @@ fn unaligned_command(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
         return false;
     };
     matches!(shape(f, &receiver), Shape::Method)
-        && receiver.opening_loc().is_none()
+        && !parenthesised(f, &receiver)
         && receiver.arguments().is_some()
         && has_block(&receiver)
 }
@@ -979,13 +1015,237 @@ fn has_block(node: &CallNode<'_>) -> bool {
 }
 
 fn receiver_and_name(f: &mut Formatter<'_>, node: &CallNode<'_>) {
-    if let Some(receiver) = node.receiver() {
-        f.node(&receiver);
-        call_operator(f, node);
+    match node.receiver() {
+        Some(receiver) if omits_self(f, node, &receiver) => {}
+        Some(receiver) => {
+            f.node(&receiver);
+            call_operator(f, node);
+        }
+        None if requires_self(f, node) => f.b.text("self."),
+        None => {}
     }
     if let Some(message) = node.message_loc() {
         f.text_of(&message);
     }
+}
+
+/// Whether the arguments of a call are printed in parentheses: as written,
+/// or as the parentheses policies decide. Operators, index and attribute
+/// writes keep the source's spelling.
+pub(super) fn parenthesised(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
+    let written = node.opening_loc().is_some();
+    if !matches!(shape(f, node), Shape::Method) {
+        return written;
+    }
+    let name = node.name().as_slice();
+    // Spelled bare, the name would read as a constant, a local variable or
+    // the `.()` shorthand.
+    let bare_reads_differently = !identifier_name(name) || node.message_loc().is_none() || f.members.is_shadowed(node);
+    let has_arguments = node.arguments().is_some() || matches!(node.block(), Some(Node::BlockArgumentNode { .. }));
+    if has_arguments {
+        let exempt = Exempt {
+            require: policy_exempt(f, node),
+            omit: bare_reads_differently || allowed_method(f, name),
+        };
+        return arguments_parenthesised(
+            f,
+            &node.as_node(),
+            written,
+            exempt,
+            node.arguments().as_ref(),
+            node.block(),
+        );
+    }
+    match (written, f.options.method_call_without_args_parentheses) {
+        (true, MethodCallParentheses::OmitParentheses) => {
+            bare_reads_differently || allowed_method(f, name) || f.has_dangling(&node.as_node())
+        }
+        (true, _) => true,
+        (false, MethodCallParentheses::RequireParentheses) => {
+            !policy_exempt(f, node) && node.block().is_none() && f.members.is_member_call(node)
+        }
+        (false, _) => false,
+    }
+}
+
+/// The owner-specific reasons to leave an argument list as written, one
+/// per policy value: a call in macro position is exempt from `require`; a
+/// call whose bare name would read differently is exempt from `omit`.
+struct Exempt {
+    require: bool,
+    omit: bool,
+}
+
+/// Whether the arguments of a call, `super` or `yield` are printed in
+/// parentheses under `method_call_with_args_parentheses`. Written
+/// parentheses go only in tail position, with no block on the owner or
+/// among its arguments, no comment inside them, and no argument that needs
+/// them (see [`arguments_need_parentheses`]).
+fn arguments_parenthesised(
+    f: &Formatter<'_>,
+    owner: &Node<'_>,
+    written: bool,
+    exempt: Exempt,
+    arguments: Option<&ArgumentsNode<'_>>,
+    block: Option<Node<'_>>,
+) -> bool {
+    match (written, f.options.method_call_with_args_parentheses) {
+        (true, MethodCallParentheses::OmitParentheses) => {
+            let (block_node, block_argument) = split_block(block);
+            exempt.omit
+                || block_node.is_some()
+                || f.has_dangling(owner)
+                || !f.members.in_tail_position(owner)
+                || f.members.arguments_contain_block(owner)
+                || arguments_need_parentheses(f, arguments, block_argument.as_ref())
+        }
+        (true, _) => true,
+        (false, MethodCallParentheses::RequireParentheses) => !exempt.require,
+        (false, _) => false,
+    }
+}
+
+/// Arguments that only parse as intended inside parentheses: a first
+/// argument starting with a token Ruby also reads as an operator or a block
+/// (`-1`, `*a`, `&b`, `[1]`, `(x)`, `/re/`, `%w[]`, `?c`, `::A`, `{ }`), an
+/// argument that is itself a keyword expression, assignment, `and`/`or`,
+/// or `...`, and a value-omitted label (`foo a, b:` would take the next
+/// line as the value).
+fn arguments_need_parentheses(
+    f: &Formatter<'_>,
+    arguments: Option<&ArgumentsNode<'_>>,
+    block_argument: Option<&Node<'_>>,
+) -> bool {
+    let first_start = arguments
+        .and_then(|a| a.arguments().first())
+        .map(|argument| argument.location().start_offset())
+        .or_else(|| block_argument.map(|argument| argument.location().start_offset()));
+    let Some(first_start) = first_start else {
+        return true;
+    };
+    let source = &f.source[first_start..];
+    if source.starts_with(b"::") || source.first().is_some_and(|byte| b"-+*&[(/%?{".contains(byte)) {
+        return true;
+    }
+    arguments.iter().flat_map(|a| a.arguments().iter()).any(|argument| {
+        super::control::is_assignment(&argument)
+            || matches!(
+                argument,
+                Node::IfNode { .. }
+                    | Node::UnlessNode { .. }
+                    | Node::WhileNode { .. }
+                    | Node::UntilNode { .. }
+                    | Node::CaseNode { .. }
+                    | Node::CaseMatchNode { .. }
+                    | Node::AndNode { .. }
+                    | Node::OrNode { .. }
+                    | Node::RescueModifierNode { .. }
+                    | Node::MatchPredicateNode { .. }
+                    | Node::MatchRequiredNode { .. }
+                    | Node::ForwardingArgumentsNode { .. }
+            )
+            || argument
+                .as_call_node()
+                .is_some_and(|call| call.message_loc().is_some_and(|m| f.slice(&m) == "not"))
+            || argument.as_keyword_hash_node().is_some_and(|hash| {
+                hash.elements().iter().any(|element| {
+                    element
+                        .as_assoc_node()
+                        .is_some_and(|assoc| matches!(assoc.value(), Node::ImplicitNode { .. }))
+                })
+            })
+    })
+}
+
+/// Whether a call prints its receiver: one it has, unless it is a `self.`
+/// dropped by `omit_self`.
+pub(super) fn prints_receiver(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
+    node.receiver().is_some_and(|receiver| !omits_self(f, node, &receiver))
+}
+
+/// Whether a receiverless call is printed with a `self.` receiver.
+fn requires_self(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
+    f.options.redundant_self == RedundantSelf::RequireSelf
+        && matches!(shape(f, node), Shape::Method)
+        && !policy_exempt(f, node)
+        && f.members.is_member_call(node)
+}
+
+/// Whether a written `self.` receiver is dropped: the bare name must still
+/// read as the same call, and no comment may be attached to the `self`.
+fn omits_self(f: &Formatter<'_>, node: &CallNode<'_>, receiver: &Node<'_>) -> bool {
+    let name = node.name().as_slice();
+    f.options.redundant_self == RedundantSelf::OmitSelf
+        && matches!(receiver, Node::SelfNode { .. })
+        && node
+            .call_operator_loc()
+            .is_some_and(|operator| f.slice(&operator) == ".")
+        && node.message_loc().is_some()
+        && matches!(shape(f, node), Shape::Method)
+        && !node.is_attribute_write()
+        && identifier_name(name)
+        && !RUBY_KEYWORDS.contains(&name)
+        && !allowed_method(f, name)
+        && !f.members.is_shadowed(node)
+        && f.comments.get(receiver).is_none()
+}
+
+/// Names that are a method call only after a dot: `self.class`, `self.then`.
+const RUBY_KEYWORDS: [&[u8]; 41] = [
+    b"__ENCODING__",
+    b"__FILE__",
+    b"__LINE__",
+    b"BEGIN",
+    b"END",
+    b"alias",
+    b"and",
+    b"begin",
+    b"break",
+    b"case",
+    b"class",
+    b"def",
+    b"defined?",
+    b"do",
+    b"else",
+    b"elsif",
+    b"end",
+    b"ensure",
+    b"false",
+    b"for",
+    b"if",
+    b"in",
+    b"module",
+    b"next",
+    b"nil",
+    b"not",
+    b"or",
+    b"redo",
+    b"rescue",
+    b"retry",
+    b"return",
+    b"self",
+    b"super",
+    b"then",
+    b"true",
+    b"undef",
+    b"unless",
+    b"until",
+    b"when",
+    b"while",
+    b"yield",
+];
+
+/// A call exempt from the policies: a configured allowed method, or a call
+/// in macro position.
+fn policy_exempt(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
+    allowed_method(f, node.name().as_slice()) || f.members.in_macro_position(node)
+}
+
+fn allowed_method(f: &Formatter<'_>, name: &[u8]) -> bool {
+    f.options
+        .allowed_methods
+        .iter()
+        .any(|allowed| allowed.as_bytes() == name)
 }
 
 /// Builds `build`'s docs, keeps them, and reports the width of the text after
@@ -1048,7 +1308,7 @@ fn chain(f: &mut Formatter<'_>, members: &[&CallNode<'_>]) {
     let last_index = members.len() - 1;
     let inner = members.iter().enumerate().any(|(i, m)| {
         let last = i == last_index;
-        (has_block(m) && !last) || (m.opening_loc().is_some() && (!last || has_block(m)))
+        (has_block(m) && !last) || (parenthesised(f, m) && (!last || has_block(m)))
     });
     let last = members.last().expect("chain has members");
     let member_with_comments = |f: &mut Formatter<'_>, member: &CallNode<'_>, layout: MemberLayout| {
@@ -1103,7 +1363,7 @@ fn chain(f: &mut Formatter<'_>, members: &[&CallNode<'_>]) {
         });
     };
     let (block_node, block_argument) = split_block(last.block());
-    if last.opening_loc().is_some() {
+    if parenthesised(f, last) {
         f.group(|f| {
             dots(f);
             paren_args(f, &last.as_node(), last.arguments().as_ref(), block_argument.as_ref());
@@ -1142,7 +1402,7 @@ fn chain_member(f: &mut Formatter<'_>, member: &CallNode<'_>, layout: MemberLayo
         return;
     }
     let (block_node, block_argument) = split_block(member.block());
-    if member.opening_loc().is_some() {
+    if parenthesised(f, member) {
         paren_args(
             f,
             &member.as_node(),
@@ -1167,15 +1427,44 @@ fn paren_args(
         f.b.text("()");
         return;
     }
-    f.group(|f| {
-        f.b.text("(");
-        f.indent(|f| {
-            f.b.line(SOFT);
-            in_command(f, false, |f| argument_list(f, arguments, block_argument));
-            if block_argument.is_none() && arguments.is_some_and(|a| allows_trailing_comma(f, a)) {
-                trailing_comma(f);
-            }
-            // Own-line comments after the last argument dangle on the call.
+    f.group(|f| wrapped_arguments(f, Some(owner), arguments, block_argument, Parens::Fixed, true));
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Parens {
+    /// `(a, b)` flat and broken alike.
+    Fixed,
+    /// ` a, b` flat; `(\n  a,\n  b\n)` broken, so a `do` block among the
+    /// arguments never lands in a multiline command call.
+    Optional,
+}
+
+/// An argument list inside its parentheses, one argument per line when
+/// broken, with a trailing comma after the last when `trailing` allows one.
+/// Own-line comments after the last argument dangle on `owner`; a caller
+/// that passes none has checked there are none. The caller supplies the
+/// group and has printed the name.
+fn wrapped_arguments(
+    f: &mut Formatter<'_>,
+    owner: Option<&Node<'_>>,
+    arguments: Option<&ArgumentsNode<'_>>,
+    block_argument: Option<&Node<'_>>,
+    parens: Parens,
+    trailing: bool,
+) {
+    match parens {
+        Parens::Fixed => f.b.text("("),
+        Parens::Optional => f.if_break(|f| f.b.text("("), |f| f.b.text(" ")),
+    }
+    f.indent(|f| {
+        f.b.line(SOFT);
+        in_command(f, parens == Parens::Optional, |f| {
+            argument_list(f, arguments, block_argument)
+        });
+        if trailing && block_argument.is_none() && arguments.is_some_and(|a| allows_trailing_comma(f, a)) {
+            trailing_comma(f);
+        }
+        if let Some(owner) = owner {
             let opening = owner
                 .as_call_node()
                 .and_then(|c| c.opening_loc())
@@ -1185,10 +1474,13 @@ fn paren_args(
                 f.b.line(HARD);
                 comment_lines(f, &comments);
             }
-        });
-        f.b.line(SOFT);
-        f.b.text(")");
+        }
     });
+    f.b.line(SOFT);
+    match parens {
+        Parens::Fixed => f.b.text(")"),
+        Parens::Optional => f.if_break(|f| f.b.text(")"), |_| {}),
+    }
 }
 
 /// Omits a trailing comma after `...` or a command call (`foo(bar baz)`).
@@ -1210,7 +1502,7 @@ fn allows_trailing_comma(f: &Formatter<'_>, arguments: &ArgumentsNode<'_>) -> bo
 /// A method call whose arguments (or block pass) have no parentheses.
 pub(super) fn is_command(f: &Formatter<'_>, node: &CallNode<'_>) -> bool {
     matches!(shape(f, node), Shape::Method)
-        && node.opening_loc().is_none()
+        && !parenthesised(f, node)
         && (node.arguments().is_some() || matches!(node.block(), Some(Node::BlockArgumentNode { .. })))
 }
 
@@ -1332,12 +1624,38 @@ pub fn splat_node(f: &mut Formatter<'_>, node: &SplatNode<'_>) {
 
 pub fn super_node(f: &mut Formatter<'_>, node: &SuperNode<'_>) {
     f.b.text("super");
-    let parenthesised = node.lparen_loc().is_some();
     let (block_node, block_argument) = split_block(node.block());
     let arguments = node.arguments();
+    let written = node.lparen_loc().is_some();
+    let has_arguments = arguments.is_some() || block_argument.is_some();
+    // Bare `super` forwards the caller's arguments and `super()` passes
+    // none: only a `super` with arguments follows the policy.
+    let parenthesised = if has_arguments {
+        arguments_parenthesised(
+            f,
+            &node.as_node(),
+            written,
+            keyword_exempt(f, b"super"),
+            arguments.as_ref(),
+            node.block(),
+        )
+    } else {
+        written
+    };
     if parenthesised {
         paren_args(f, &node.as_node(), arguments.as_ref(), block_argument.as_ref());
-    } else if arguments.is_some() || block_argument.is_some() {
+    } else if written {
+        f.group(|f| {
+            wrapped_arguments(
+                f,
+                None,
+                arguments.as_ref(),
+                block_argument.as_ref(),
+                Parens::Optional,
+                true,
+            )
+        });
+    } else if has_arguments {
         f.group(|f| {
             f.b.text(" ");
             command_args(f, arguments.as_ref(), block_argument.as_ref(), "super ".len());
@@ -1353,8 +1671,8 @@ pub fn super_node(f: &mut Formatter<'_>, node: &SuperNode<'_>) {
     }
 }
 
-/// `yield a, b` gains parentheses when it breaks; `yield(a, b)` keeps them.
-/// Neither takes a trailing comma.
+/// `yield a, b` gains parentheses when it breaks, or under the parentheses
+/// policy; `yield(a, b)` keeps them. Neither takes a trailing comma.
 pub fn yield_node(f: &mut Formatter<'_>, node: &YieldNode<'_>) {
     f.b.text("yield");
     let Some(arguments) = node.arguments() else {
@@ -1363,22 +1681,23 @@ pub fn yield_node(f: &mut Formatter<'_>, node: &YieldNode<'_>) {
         }
         return;
     };
-    let parenthesised = node.lparen_loc().is_some();
-    f.group(|f| {
-        if parenthesised {
-            f.b.text("(");
-        } else {
-            f.if_break(|f| f.b.text("("), |f| f.b.text(" "));
-        }
-        f.indent(|f| {
-            f.b.line(SOFT);
-            argument_list(f, Some(&arguments), None);
-        });
-        f.b.line(SOFT);
-        if parenthesised {
-            f.b.text(")");
-        } else {
-            f.if_break(|f| f.b.text(")"), |_| {});
-        }
-    });
+    let parenthesised = arguments_parenthesised(
+        f,
+        &node.as_node(),
+        node.lparen_loc().is_some(),
+        keyword_exempt(f, b"yield"),
+        Some(&arguments),
+        None,
+    );
+    let parens = if parenthesised { Parens::Fixed } else { Parens::Optional };
+    f.group(|f| wrapped_arguments(f, None, Some(&arguments), None, parens, false));
+}
+
+/// `super` and `yield` are exempt from both policy values only by name.
+fn keyword_exempt(f: &Formatter<'_>, keyword: &[u8]) -> Exempt {
+    let allowed = allowed_method(f, keyword);
+    Exempt {
+        require: allowed,
+        omit: allowed,
+    }
 }

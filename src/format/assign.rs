@@ -21,7 +21,7 @@ use ruby_prism::{
     LocalVariableTargetNode, LocalVariableWriteNode, Location, MultiTargetNode, MultiWriteNode, Node,
 };
 
-use super::Formatter;
+use super::{Formatter, calls};
 use crate::doc::{SOFT, SPACE};
 
 /// `lhs <operator> value` for every assignment operator (`=`, `||=`, `&&=`,
@@ -117,9 +117,10 @@ pub fn stays_inline(f: &Formatter<'_>, value: &Node<'_>) -> bool {
                 // Something after the operator must be able to break: a
                 // bracket, a block, or a dot chain. A bare identifier call
                 // still moves down whole, like any other unbreakable value.
+                let parenthesised = calls::parenthesised(f, &call);
                 return !call.is_attribute_write()
-                    && !(call.arguments().is_some() && call.opening_loc().is_none())
-                    && (call.opening_loc().is_some() || call.block().is_some() || call.receiver().is_some());
+                    && !(call.arguments().is_some() && !parenthesised)
+                    && (parenthesised || call.block().is_some() || calls::prints_receiver(f, &call));
             }
             let Some(receiver) = call.receiver() else {
                 return false;
@@ -127,7 +128,7 @@ pub fn stays_inline(f: &Formatter<'_>, value: &Node<'_>) -> bool {
             call.call_operator_loc().is_some()
                 && call.message_loc().is_some()
                 && !call.is_attribute_write()
-                && !(call.arguments().is_some() && call.opening_loc().is_none())
+                && !(call.arguments().is_some() && !calls::parenthesised(f, &call))
                 && !matches!(call.block(), Some(Node::BlockNode { .. }))
                 && stays_inline(f, &receiver)
         }
