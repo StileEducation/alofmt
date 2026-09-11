@@ -2,6 +2,7 @@
 //! statement lists, and comment placement; each family module owns the
 //! layouts for its node kinds.
 
+mod analysis;
 mod assign;
 mod calls;
 mod control;
@@ -95,8 +96,7 @@ fn document<'a>(source: &'a [u8], options: &FormatOptions) -> anyhow::Result<Doc
         let line_starts: Vec<usize> = std::iter::once(0)
             .chain(memchr::memchr_iter(b'\n', source).map(|offset| offset + 1))
             .collect();
-        let control = control::State::analyze(&root);
-        let members = members::State::analyze(&root, options);
+        let (control, members) = analysis::analyze(&root, options);
         // Layout nodes scale with both syntax nodes and line-level separators.
         // Reserving once avoids moving large arenas while they grow.
         let document_capacity = control.node_count().saturating_add(line_starts.len()).saturating_mul(3);
