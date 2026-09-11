@@ -613,6 +613,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn character_literals_print_under_every_quote_style() {
+        let with = |style: crate::QuoteStyle| {
+            let options = FormatOptions {
+                quote_style: style,
+                ..FormatOptions::default()
+            };
+            format_with_options(b"x = ?c\ny = ?\\n\nz = ?\"\n", &options).expect("valid Ruby")
+        };
+
+        assert_eq!(with(crate::QuoteStyle::Preserve), "x = ?c\ny = ?\\n\nz = ?\"\n");
+        assert_eq!(with(crate::QuoteStyle::Double), "x = \"c\"\ny = ?\\n\nz = ?\"\n");
+        assert_eq!(with(crate::QuoteStyle::Single), "x = 'c'\ny = ?\\n\nz = '\\\"'\n");
+    }
+
+    #[test]
     fn rejects_non_utf8_input() {
         let error = format(b"x = \xff\n").expect_err("invalid UTF-8 should fail");
 
