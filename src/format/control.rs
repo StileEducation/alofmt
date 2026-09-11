@@ -232,7 +232,7 @@ fn parenthesized(f: &mut Formatter<'_>, needed: bool, inner: impl FnOnce(&mut Fo
     }
 }
 
-fn is_assignment(node: &Node<'_>) -> bool {
+pub(super) fn is_assignment(node: &Node<'_>) -> bool {
     match node {
         Node::LocalVariableWriteNode { .. }
         | Node::LocalVariableOperatorWriteNode { .. }

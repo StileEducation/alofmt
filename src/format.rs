@@ -8,6 +8,7 @@ mod control;
 mod defs;
 mod dispatch;
 mod literals;
+mod members;
 mod patterns;
 mod strings;
 
@@ -95,6 +96,7 @@ fn document<'a>(source: &'a [u8], options: &FormatOptions) -> anyhow::Result<Doc
             .chain(memchr::memchr_iter(b'\n', source).map(|offset| offset + 1))
             .collect();
         let control = control::State::analyze(&root);
+        let members = members::State::analyze(&root, options);
         // Layout nodes scale with both syntax nodes and line-level separators.
         // Reserving once avoids moving large arenas while they grow.
         let document_capacity = control.node_count().saturating_add(line_starts.len()).saturating_mul(3);
@@ -109,6 +111,7 @@ fn document<'a>(source: &'a [u8], options: &FormatOptions) -> anyhow::Result<Doc
             header_break: false,
             calls: calls::State::default(),
             control,
+            members,
         };
         formatter.node(&root);
         match result.data_loc() {
@@ -155,6 +158,8 @@ pub struct Formatter<'a> {
     pub calls: calls::State,
     /// Analysis and layout context used by control-flow nodes.
     pub control: control::State,
+    /// Which calls are member calls or macros, for the call policies.
+    pub members: members::State,
 }
 
 impl<'a> Formatter<'a> {

@@ -1,7 +1,9 @@
 //! Every file under `tests/fixtures` is canonical output under the explicit
-//! compatibility profile, and every file under `tests/layout_fixtures` is
-//! canonical under that profile plus the opt-in layout options; formatting
-//! either must change nothing.
+//! compatibility profile; every file under `tests/layout_fixtures` is
+//! canonical under that profile plus the opt-in layout options, and every
+//! file under `tests/call_policy_fixtures` and `tests/omit_policy_fixtures`
+//! under that profile plus the `require` or `omit` call policies. Formatting
+//! any of them must change nothing.
 
 use std::path::Path;
 
@@ -26,6 +28,22 @@ fn layout_fixtures_are_fixpoints() {
     assert_fixpoints(
         concat!(include_str!("compatibility.toml"), include_str!("layout.toml")),
         "/tests/layout_fixtures",
+    );
+}
+
+#[test]
+fn call_policy_fixtures_are_fixpoints() {
+    assert_fixpoints(
+        concat!(include_str!("compatibility.toml"), include_str!("call_policies.toml")),
+        "/tests/call_policy_fixtures",
+    );
+}
+
+#[test]
+fn omit_policy_fixtures_are_fixpoints() {
+    assert_fixpoints(
+        concat!(include_str!("compatibility.toml"), include_str!("omit_policies.toml")),
+        "/tests/omit_policy_fixtures",
     );
 }
 

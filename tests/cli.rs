@@ -74,6 +74,54 @@ fn formats_standard_input_and_honours_style_flags() {
 }
 
 #[test]
+fn applies_call_policy_flags() {
+    let output = alofmt(
+        &[
+            "--method-call-with-args-parentheses",
+            "require-parentheses",
+            "--method-call-without-args-parentheses",
+            "require-parentheses",
+            "--redundant-self",
+            "require-self",
+            "--allowed-method",
+            "raise",
+            "--member-macro",
+            "const",
+            "-",
+        ],
+        b"class A\n  const :c, String\n\n  def a\n    b 1\n    c\n    raise X, 'm'\n  end\n\n  def b(x)\n  end\nend\n",
+    );
+
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "class A\n  const :c, String\n\n  def a\n    self.b(1)\n    self.c()\n    raise X, 'm'\n  end\n\n  def b(x)\n  end\nend\n"
+    );
+}
+
+#[test]
+fn applies_omit_policy_flags() {
+    let output = alofmt(
+        &[
+            "--method-call-with-args-parentheses",
+            "omit-parentheses",
+            "--method-call-without-args-parentheses",
+            "omit-parentheses",
+            "--redundant-self",
+            "omit-self",
+            "-",
+        ],
+        b"class A\n  def a\n    self.b(1)\n    self.c()\n  end\nend\n",
+    );
+
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "class A\n  def a\n    b 1\n    c\n  end\nend\n"
+    );
+}
+
+#[test]
 fn check_on_standard_input_uses_documented_exit_statuses() {
     let changed = alofmt(&["--check", "--quiet", "-"], b"x=1\n");
     let clean = alofmt(&["--check", "--quiet", "-"], b"x = 1\n");

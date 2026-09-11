@@ -7,5 +7,6 @@ mod options;
 
 pub use format::{format, format_with_options, is_formatted, is_formatted_with_options};
 pub use options::{
-    BlockDelimiters, DelimitedArgumentAlignment, FormatOptions, MultilineAssignmentLayout, PercentArrays, QuoteStyle,
+    BlockDelimiters, DelimitedArgumentAlignment, FormatOptions, MethodCallParentheses, MultilineAssignmentLayout,
+    PercentArrays, QuoteStyle, RedundantSelf,
 };

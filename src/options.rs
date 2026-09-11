@@ -46,6 +46,17 @@ pub struct FormatOptions {
     pub multiline_assignment_layout: MultilineAssignmentLayout,
     /// Which delimiters a block prints with, where either would parse the same.
     pub block_delimiters: BlockDelimiters,
+    /// Whether the arguments of a call are printed in parentheses.
+    pub method_call_with_args_parentheses: MethodCallParentheses,
+    /// Whether a member call with no arguments is printed with `()`.
+    pub method_call_without_args_parentheses: MethodCallParentheses,
+    /// Whether a member call is printed with an explicit `self.` receiver.
+    pub redundant_self: RedundantSelf,
+    /// Method names exempt from the parentheses and `self.` policies.
+    pub allowed_methods: Vec<String>,
+    /// Calls whose positional symbol and string arguments name members, in
+    /// addition to `def` and `alias`.
+    pub member_macros: Vec<String>,
 }
 
 impl Default for FormatOptions {
@@ -68,8 +79,62 @@ impl Default for FormatOptions {
             delimited_argument_alignment: DelimitedArgumentAlignment::Aligned,
             multiline_assignment_layout: MultilineAssignmentLayout::NewLine,
             block_delimiters: BlockDelimiters::LineCountBased,
+            method_call_with_args_parentheses: MethodCallParentheses::Preserve,
+            method_call_without_args_parentheses: MethodCallParentheses::Preserve,
+            redundant_self: RedundantSelf::Preserve,
+            allowed_methods: Vec::new(),
+            member_macros: ["attr", "attr_reader", "attr_accessor", "define_method"]
+                .map(str::to_owned)
+                .to_vec(),
         }
     }
+}
+
+/// Whether the arguments of a call are printed in parentheses. The names are
+/// the styles of RuboCop's `Style/MethodCallWithArgsParentheses`; the same
+/// values apply to `Style/MethodCallWithoutArgsParentheses`, where
+/// `require_parentheses` has no RuboCop equivalent.
+///
+/// A member call is a call with no receiver, or `self` as the receiver, to a
+/// method defined by a `def`, an `alias`, or a
+/// [`FormatOptions::member_macros`] call in the lexically enclosing class or
+/// module body at the same `self` level. A macro is a receiverless call that
+/// is a statement of a class, module, singleton-class or top-level body, or
+/// of a block attached to a macro. [`FormatOptions::allowed_methods`] are
+/// always left as written; macros are left as written by
+/// `require_parentheses`.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MethodCallParentheses {
+    /// Parentheses as written in the source.
+    #[default]
+    Preserve,
+    /// With arguments: every call, `super` and `yield` is printed with them.
+    /// Without arguments: a member call with no block is printed with `()`.
+    RequireParentheses,
+    /// With arguments: parentheses are dropped where the call parses the
+    /// same without them, in tail position and with no ambiguous first
+    /// argument. Without arguments: `()` is dropped from any call unless the
+    /// bare name would read as a constant or a local variable.
+    OmitParentheses,
+}
+
+/// Whether a member call is printed with an explicit `self.` receiver. Named
+/// after RuboCop's `Style/RedundantSelf`; `require_self` has no RuboCop
+/// equivalent and requires Ruby 2.7 or later, where a private method can be
+/// called with a literal `self` receiver.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RedundantSelf {
+    /// The receiver as written in the source.
+    #[default]
+    Preserve,
+    /// A receiverless member call outside macro position is printed with `self.`.
+    RequireSelf,
+    /// A literal `self.` receiver is dropped from any call where the bare
+    /// name still reads as the same call: not a setter, operator, keyword,
+    /// constant or local variable.
+    OmitSelf,
 }
 
 /// Which delimiters a block prints with. A block whose delimiters change what
@@ -117,6 +182,12 @@ impl FormatOptions {
                 !directive.bytes().any(|byte| byte == b'\n' || byte == b'\r'),
                 "ignore directives cannot contain line breaks"
             );
+        }
+        for name in &self.allowed_methods {
+            ensure!(!name.is_empty(), "allowed methods cannot be empty");
+        }
+        for name in &self.member_macros {
+            ensure!(!name.is_empty(), "member macros cannot be empty");
         }
         Ok(())
     }
@@ -201,6 +272,82 @@ mod tests {
         );
         assert_eq!(options.multiline_assignment_layout, MultilineAssignmentLayout::NewLine);
         assert_eq!(options.block_delimiters, BlockDelimiters::LineCountBased);
+        assert_eq!(
+            options.method_call_with_args_parentheses,
+            MethodCallParentheses::Preserve
+        );
+        assert_eq!(
+            options.method_call_without_args_parentheses,
+            MethodCallParentheses::Preserve
+        );
+        assert_eq!(options.redundant_self, RedundantSelf::Preserve);
+        assert!(options.allowed_methods.is_empty());
+        // Core `Module` methods only: inert until a call policy is enabled.
+        assert_eq!(
+            options.member_macros,
+            ["attr", "attr_reader", "attr_accessor", "define_method"]
+        );
+    }
+
+    #[test]
+    fn parses_call_policies() {
+        let options = FormatOptions::from_toml(
+            r#"
+                method_call_with_args_parentheses = "require_parentheses"
+                method_call_without_args_parentheses = "require_parentheses"
+                redundant_self = "require_self"
+                allowed_methods = ["raise", "to"]
+                member_macros = ["attr_reader", "const"]
+            "#,
+        )
+        .expect("valid configuration");
+
+        assert_eq!(
+            options.method_call_with_args_parentheses,
+            MethodCallParentheses::RequireParentheses
+        );
+        assert_eq!(
+            options.method_call_without_args_parentheses,
+            MethodCallParentheses::RequireParentheses
+        );
+        assert_eq!(options.redundant_self, RedundantSelf::RequireSelf);
+        assert_eq!(options.allowed_methods, ["raise", "to"]);
+        assert_eq!(options.member_macros, ["attr_reader", "const"]);
+    }
+
+    #[test]
+    fn parses_omit_call_policies() {
+        let options = FormatOptions::from_toml(
+            r#"
+                method_call_with_args_parentheses = "omit_parentheses"
+                method_call_without_args_parentheses = "omit_parentheses"
+                redundant_self = "omit_self"
+            "#,
+        )
+        .expect("valid configuration");
+
+        assert_eq!(
+            options.method_call_with_args_parentheses,
+            MethodCallParentheses::OmitParentheses
+        );
+        assert_eq!(
+            options.method_call_without_args_parentheses,
+            MethodCallParentheses::OmitParentheses
+        );
+        assert_eq!(options.redundant_self, RedundantSelf::OmitSelf);
+    }
+
+    #[test]
+    fn rejects_empty_method_names() {
+        let options = FormatOptions {
+            allowed_methods: vec![String::new()],
+            ..FormatOptions::default()
+        };
+
+        assert_eq!(
+            options.validate().expect_err("empty name should fail").to_string(),
+            "allowed methods cannot be empty"
+        );
     }
 
     #[test]
