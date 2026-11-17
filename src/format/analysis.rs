@@ -21,10 +21,10 @@ use ruby_prism::{
     ProgramNode, RescueModifierNode, ReturnNode, SingletonClassNode, StatementsNode, SuperNode, Visit, YieldNode,
 };
 
-use super::control::ContextWalk;
-use super::members::{Level, MembersWalk, Position};
-use super::{control, members};
 use crate::FormatOptions;
+use crate::format::control::ContextWalk;
+use crate::format::members::{Level, MembersWalk, Position};
+use crate::format::{control, members};
 
 pub fn analyze(root: &Node<'_>, options: &FormatOptions) -> (control::State, members::State) {
     let mut walk = Walk {

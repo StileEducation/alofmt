@@ -49,30 +49,80 @@ use ruby_prism::{
 };
 use rustc_hash::FxHashMap as HashMap;
 
-/// Identity of a node: byte range plus discriminant, since Prism nodes aren't
+/// Identity of a node: byte range plus kind, since Prism nodes aren't
 /// hashable or clonable.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Key {
     pub start: usize,
     pub end: usize,
-    pub kind: std::mem::Discriminant<Node<'static>>,
+    pub kind: Kind,
 }
 
 impl Key {
     pub fn of(node: &Node<'_>) -> Self {
         let loc = node.location();
-        // SAFETY: the discriminant does not depend on the lifetime parameter.
-        let kind = unsafe {
-            std::mem::transmute::<std::mem::Discriminant<Node<'_>>, std::mem::Discriminant<Node<'static>>>(
-                std::mem::discriminant(node),
-            )
-        };
         Self {
             start: loc.start_offset(),
             end: loc.end_offset(),
-            kind,
+            kind: Kind::of(node),
         }
     }
+}
+
+/// Declares [`Kind`] with one variant per Prism node kind, and the match that
+/// reads a node's kind. The match has no wildcard arm, so a Prism upgrade that
+/// adds a node kind fails to compile until the kind is listed below.
+macro_rules! kinds {
+    ($($kind:ident),* $(,)?) => {
+        /// A Kind is the kind of Prism node that a [`Key`] names.
+        /// `std::mem::Discriminant<Node<'pr>>` would say the same thing, but it
+        /// carries the parse's lifetime, and keys are stored in maps that are
+        /// looked up with nodes of any lifetime.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        #[expect(clippy::enum_variant_names, reason = "the variants are named after Prism's nodes")]
+        pub enum Kind {
+            $($kind),*
+        }
+
+        impl Kind {
+            fn of(node: &Node<'_>) -> Self {
+                match node {
+                    $(Node::$kind { .. } => Self::$kind),*
+                }
+            }
+        }
+    };
+}
+
+kinds! {
+    AliasGlobalVariableNode, AliasMethodNode, AlternationPatternNode, AndNode, ArgumentsNode, ArrayNode,
+    ArrayPatternNode, AssocNode, AssocSplatNode, BackReferenceReadNode, BeginNode, BlockArgumentNode,
+    BlockLocalVariableNode, BlockNode, BlockParameterNode, BlockParametersNode, BreakNode, CallAndWriteNode,
+    CallNode, CallOperatorWriteNode, CallOrWriteNode, CallTargetNode, CapturePatternNode, CaseMatchNode, CaseNode,
+    ClassNode, ClassVariableAndWriteNode, ClassVariableOperatorWriteNode, ClassVariableOrWriteNode,
+    ClassVariableReadNode, ClassVariableTargetNode, ClassVariableWriteNode, ConstantAndWriteNode,
+    ConstantOperatorWriteNode, ConstantOrWriteNode, ConstantPathAndWriteNode, ConstantPathNode,
+    ConstantPathOperatorWriteNode, ConstantPathOrWriteNode, ConstantPathTargetNode, ConstantPathWriteNode,
+    ConstantReadNode, ConstantTargetNode, ConstantWriteNode, DefNode, DefinedNode, ElseNode, EmbeddedStatementsNode,
+    EmbeddedVariableNode, EnsureNode, FalseNode, FindPatternNode, FlipFlopNode, FloatNode, ForNode,
+    ForwardingArgumentsNode, ForwardingParameterNode, ForwardingSuperNode, GlobalVariableAndWriteNode,
+    GlobalVariableOperatorWriteNode, GlobalVariableOrWriteNode, GlobalVariableReadNode, GlobalVariableTargetNode,
+    GlobalVariableWriteNode, HashNode, HashPatternNode, IfNode, ImaginaryNode, ImplicitNode, ImplicitRestNode,
+    InNode, IndexAndWriteNode, IndexOperatorWriteNode, IndexOrWriteNode, IndexTargetNode,
+    InstanceVariableAndWriteNode, InstanceVariableOperatorWriteNode, InstanceVariableOrWriteNode,
+    InstanceVariableReadNode, InstanceVariableTargetNode, InstanceVariableWriteNode, IntegerNode,
+    InterpolatedMatchLastLineNode, InterpolatedRegularExpressionNode, InterpolatedStringNode,
+    InterpolatedSymbolNode, InterpolatedXStringNode, ItLocalVariableReadNode, ItParametersNode, KeywordHashNode,
+    KeywordRestParameterNode, LambdaNode, LocalVariableAndWriteNode, LocalVariableOperatorWriteNode,
+    LocalVariableOrWriteNode, LocalVariableReadNode, LocalVariableTargetNode, LocalVariableWriteNode,
+    MatchLastLineNode, MatchPredicateNode, MatchRequiredNode, MatchWriteNode, MissingNode, ModuleNode,
+    MultiTargetNode, MultiWriteNode, NextNode, NilNode, NoKeywordsParameterNode, NumberedParametersNode,
+    NumberedReferenceReadNode, OptionalKeywordParameterNode, OptionalParameterNode, OrNode, ParametersNode,
+    ParenthesesNode, PinnedExpressionNode, PinnedVariableNode, PostExecutionNode, PreExecutionNode, ProgramNode,
+    RangeNode, RationalNode, RedoNode, RegularExpressionNode, RequiredKeywordParameterNode, RequiredParameterNode,
+    RescueModifierNode, RescueNode, RestParameterNode, RetryNode, ReturnNode, SelfNode, ShareableConstantNode,
+    SingletonClassNode, SourceEncodingNode, SourceFileNode, SourceLineNode, SplatNode, StatementsNode, StringNode,
+    SuperNode, SymbolNode, TrueNode, UndefNode, UnlessNode, UntilNode, WhenNode, WhileNode, XStringNode, YieldNode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -799,6 +849,14 @@ enum Slot {
 mod tests {
     use super::*;
 
+    /// A Key is built and hashed for every node of a file, so it has to stay
+    /// as small as the `Discriminant` it once held made it.
+    #[test]
+    fn test_a_key_is_three_words_and_its_kind_one_byte() {
+        assert_eq!(std::mem::size_of::<Kind>(), 1);
+        assert_eq!(std::mem::size_of::<Key>(), 3 * std::mem::size_of::<usize>());
+    }
+
     fn placements(source: &[u8]) -> CommentMap {
         let result = ruby_prism::parse(source);
         assert!(result.errors().next().is_none());
@@ -808,7 +866,7 @@ mod tests {
     /// The sole comment in a parameterised block dangles on the block, not
     /// on its parameters, so the block prints it as its body.
     #[test]
-    fn sole_block_comment_dangles_on_the_block() {
+    fn test_sole_block_comment_dangles_on_the_block() {
         let source = b"foo do |x|\n    # todo\nend\n";
         let map = placements(source);
         let (block, comments) = map.dangling.iter().next().expect("a dangling comment");
@@ -818,7 +876,7 @@ mod tests {
     }
 
     #[test]
-    fn indexes_heredoc_openings_during_comment_analysis() {
+    fn test_indexes_heredoc_openings_during_comment_analysis() {
         let source = b"x = <<~TEXT\n  body\nTEXT\n";
         let map = placements(source);
 

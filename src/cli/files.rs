@@ -173,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn discovers_ruby_files_in_deterministic_order() {
+    fn test_discovers_ruby_files_in_deterministic_order() {
         let root = temporary_directory("discover");
         fs::create_dir(root.join("nested")).expect("create nested directory");
         fs::write(root.join("z.rb"), b"").expect("write Ruby file");
@@ -187,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn replaces_a_file_without_leaving_a_temporary_file() {
+    fn test_replaces_a_file_without_leaving_a_temporary_file() {
         let root = temporary_directory("replace");
         let path = root.join("example.rb");
         fs::write(&path, b"before").expect("write source");
@@ -200,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn refuses_to_overwrite_a_concurrent_change() {
+    fn test_refuses_to_overwrite_a_concurrent_change() {
         let root = temporary_directory("concurrent");
         let path = root.join("example.rb");
         fs::write(&path, b"changed").expect("write source");
@@ -215,7 +215,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn refuses_symbolic_link_inputs() {
+    fn test_refuses_symbolic_link_inputs() {
         use std::os::unix::fs::symlink;
 
         let root = temporary_directory("symlink");

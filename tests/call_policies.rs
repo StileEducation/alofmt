@@ -23,7 +23,7 @@ const REQUIRE_SELF: &str = r#"
 "#;
 
 #[test]
-fn require_parentheses_wraps_every_argument_list() {
+fn test_require_parentheses_wraps_every_argument_list() {
     let source = "\
 def run
   foo a, b
@@ -58,7 +58,7 @@ end
 }
 
 #[test]
-fn require_parentheses_leaves_macros_and_allowed_methods() {
+fn test_require_parentheses_leaves_macros_and_allowed_methods() {
     let source = "\
 require 'json'
 puts 'top level'
@@ -103,7 +103,7 @@ end
 }
 
 #[test]
-fn require_empty_parentheses_marks_member_calls_only() {
+fn test_require_empty_parentheses_marks_member_calls_only() {
     let source = "\
 class Job
   attr_reader :queue
@@ -210,7 +210,7 @@ end
 }
 
 #[test]
-fn require_self_prefixes_member_calls_outside_macro_position() {
+fn test_require_self_prefixes_member_calls_outside_macro_position() {
     let source = "\
 class Job
   attr_reader :name
@@ -275,7 +275,7 @@ end
 }
 
 #[test]
-fn policies_compose_into_self_dot_call_with_empty_parentheses() {
+fn test_policies_compose_into_self_dot_call_with_empty_parentheses() {
     let profile = r#"
         method_call_with_args_parentheses = "require_parentheses"
         method_call_without_args_parentheses = "require_parentheses"
@@ -317,7 +317,7 @@ end
 }
 
 #[test]
-fn preserve_leaves_member_calls_untouched() {
+fn test_preserve_leaves_member_calls_untouched() {
     let source = "\
 class Foo
   def method_a
@@ -336,7 +336,7 @@ end
 }
 
 #[test]
-fn require_self_does_not_lengthen_chains() {
+fn test_require_self_does_not_lengthen_chains() {
     // `self.` is added on the first pass and read back on the second; the
     // chain must count the same both times or the second pass breaks it.
     let profile = r#"
@@ -383,7 +383,7 @@ const OMIT_ALL: &str = r#"
 "#;
 
 #[test]
-fn omit_self_keeps_it_where_the_bare_name_reads_differently() {
+fn test_omit_self_keeps_it_where_the_bare_name_reads_differently() {
     let source = "\
 class Thing
   def go(count)
@@ -428,7 +428,7 @@ end
 }
 
 #[test]
-fn omit_self_does_not_lengthen_chains() {
+fn test_omit_self_does_not_lengthen_chains() {
     let profile = r#"
         redundant_self = "omit_self"
         chain_break_threshold = 3
@@ -456,7 +456,7 @@ end
 }
 
 #[test]
-fn omit_empty_parentheses_keeps_constants_locals_and_super() {
+fn test_omit_empty_parentheses_keeps_constants_locals_and_super() {
     let profile = r#"
         method_call_without_args_parentheses = "omit_parentheses"
     "#;
@@ -494,7 +494,7 @@ end
 }
 
 #[test]
-fn omit_parentheses_drops_them_in_tail_position_only() {
+fn test_omit_parentheses_drops_them_in_tail_position_only() {
     let profile = r#"
         method_call_with_args_parentheses = "omit_parentheses"
     "#;
@@ -571,7 +571,7 @@ def endless = build(1)
 }
 
 #[test]
-fn omit_parentheses_keeps_them_for_ambiguous_arguments() {
+fn test_omit_parentheses_keeps_them_for_ambiguous_arguments() {
     let profile = r#"
         method_call_with_args_parentheses = "omit_parentheses"
     "#;
@@ -629,7 +629,7 @@ end
 }
 
 #[test]
-fn omitted_parentheses_return_when_the_call_breaks() {
+fn test_omitted_parentheses_return_when_the_call_breaks() {
     // The broken form keeps the parentheses, as `yield` does. A block among
     // the arguments keeps them in every form: flat, a `do` block would bind
     // to the outer call, and a brace block may become a `do` block.
@@ -662,7 +662,7 @@ end
 }
 
 #[test]
-fn omit_policies_compose_and_stay_fixed() {
+fn test_omit_policies_compose_and_stay_fixed() {
     let source = "\
 class Foo
   def method_a

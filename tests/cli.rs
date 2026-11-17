@@ -32,7 +32,7 @@ fn run_alofmt(arguments: &[&str], stdin: &[u8], directory: Option<&std::path::Pa
 }
 
 #[test]
-fn discovers_configuration_and_applies_cli_overrides_last() {
+fn test_discovers_configuration_and_applies_cli_overrides_last() {
     let root = temporary_directory("config");
     fs::write(root.join(".alofmt.toml"), "quote_style = \"double\"\n").expect("write config");
 
@@ -65,7 +65,7 @@ fn temporary_directory(test: &str) -> PathBuf {
 }
 
 #[test]
-fn formats_standard_input_and_honours_style_flags() {
+fn test_formats_standard_input_and_honours_style_flags() {
     let output = alofmt(&["--quote-style", "preserve", "-"], b"x=\"hello\"\n");
 
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
@@ -74,7 +74,7 @@ fn formats_standard_input_and_honours_style_flags() {
 }
 
 #[test]
-fn applies_call_policy_flags() {
+fn test_applies_call_policy_flags() {
     let output = alofmt(
         &[
             "--method-call-with-args-parentheses",
@@ -100,7 +100,7 @@ fn applies_call_policy_flags() {
 }
 
 #[test]
-fn applies_omit_policy_flags() {
+fn test_applies_omit_policy_flags() {
     let output = alofmt(
         &[
             "--method-call-with-args-parentheses",
@@ -122,7 +122,7 @@ fn applies_omit_policy_flags() {
 }
 
 #[test]
-fn check_on_standard_input_uses_documented_exit_statuses() {
+fn test_check_on_standard_input_uses_documented_exit_statuses() {
     let changed = alofmt(&["--check", "--quiet", "-"], b"x=1\n");
     let clean = alofmt(&["--check", "--quiet", "-"], b"x = 1\n");
 
@@ -133,7 +133,7 @@ fn check_on_standard_input_uses_documented_exit_statuses() {
 }
 
 #[test]
-fn write_walks_directories_and_respects_gitignore() {
+fn test_write_walks_directories_and_respects_gitignore() {
     let root = temporary_directory("walk");
     fs::create_dir(root.join(".git")).expect("create repository marker");
     fs::write(root.join(".gitignore"), b"ignored.rb\n").expect("write ignore file");
@@ -149,7 +149,7 @@ fn write_walks_directories_and_respects_gitignore() {
 }
 
 #[test]
-fn refuses_ambiguous_multi_file_stdout() {
+fn test_refuses_ambiguous_multi_file_stdout() {
     let root = temporary_directory("multiple");
     let first = root.join("a.rb");
     let second = root.join("b.rb");
@@ -170,7 +170,7 @@ fn refuses_ambiguous_multi_file_stdout() {
 }
 
 #[test]
-fn parse_failures_are_reported_without_rewriting_the_file() {
+fn test_parse_failures_are_reported_without_rewriting_the_file() {
     let root = temporary_directory("parse-error");
     let path = root.join("invalid.rb");
     let source = b"def broken(\n";

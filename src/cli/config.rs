@@ -71,7 +71,7 @@ mod tests {
     }
 
     #[test]
-    fn discovers_the_nearest_configuration() {
+    fn test_discovers_the_nearest_configuration() {
         let root = temporary_directory("discovery");
         let nested = root.join("one/two");
         fs::create_dir_all(&nested).expect("create nested directory");

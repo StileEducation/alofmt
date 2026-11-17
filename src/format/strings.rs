@@ -18,10 +18,10 @@ use ruby_prism::{
     NodeList, RegularExpressionNode, StringNode, SymbolNode, Visit, XStringNode,
 };
 
-use super::Formatter;
 use crate::QuoteStyle;
 use crate::comments::Comment;
 use crate::doc::{self, HARD, HEREDOC_PRIORITY, RETURN};
+use crate::format::Formatter;
 
 pub fn string_node(f: &mut Formatter<'_>, node: &StringNode<'_>) {
     let Some(opening) = node.opening_loc() else {

@@ -915,7 +915,7 @@ mod tests {
     }
 
     #[test]
-    fn flat_when_it_fits() {
+    fn test_flat_when_it_fits() {
         let s = render(
             |b| {
                 b.group(|b| {
@@ -936,7 +936,7 @@ mod tests {
     }
 
     #[test]
-    fn breaks_with_four_space_indent_counted_as_two() {
+    fn test_breaks_with_four_space_indent_counted_as_two() {
         let s = render(
             |b| {
                 b.group(|b| {
@@ -957,7 +957,7 @@ mod tests {
     }
 
     #[test]
-    fn forced_break_propagates_to_enclosing_groups() {
+    fn test_forced_break_propagates_to_enclosing_groups() {
         let s = render(
             |b| {
                 b.group(|b| {
@@ -976,7 +976,7 @@ mod tests {
     }
 
     #[test]
-    fn line_suffix_defers_to_end_of_line() {
+    fn test_line_suffix_defers_to_end_of_line() {
         let s = render(
             |b| {
                 b.text("x = 1");
@@ -990,7 +990,7 @@ mod tests {
     }
 
     #[test]
-    fn if_break_selects_by_mode() {
+    fn test_if_break_selects_by_mode() {
         let doc = |b: &mut Builder| {
             b.group(|b| {
                 b.text("f(");
@@ -1008,7 +1008,7 @@ mod tests {
     }
 
     #[test]
-    fn trim_refunds_only_trailing_whitespace_while_fitting() {
+    fn test_trim_refunds_only_trailing_whitespace_while_fitting() {
         let s = render(
             |b| {
                 b.group(|b| {
@@ -1025,7 +1025,7 @@ mod tests {
     }
 
     #[test]
-    fn output_and_fit_indentation_are_independent() {
+    fn test_output_and_fit_indentation_are_independent() {
         let mut b = Builder::new();
         b.group(|b| {
             b.text("[");
@@ -1053,7 +1053,7 @@ mod tests {
     }
 
     #[test]
-    fn compares_rendered_output_without_materialising_it() {
+    fn test_compares_rendered_output_without_materialising_it() {
         let mut b = Builder::new();
         b.text("a  ");
         b.trim();
@@ -1076,7 +1076,7 @@ mod tests {
     }
 
     #[test]
-    fn source_spans_are_rendered_without_owned_text() {
+    fn test_source_spans_are_rendered_without_owned_text() {
         let mut b = Builder::new();
         b.source(0, 1);
         b.source(1, 3);

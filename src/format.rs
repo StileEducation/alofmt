@@ -613,7 +613,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn character_literals_print_under_every_quote_style() {
+    fn test_character_literals_print_under_every_quote_style() {
         let with = |style: crate::QuoteStyle| {
             let options = FormatOptions {
                 quote_style: style,
@@ -628,20 +628,20 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_utf8_input() {
+    fn test_rejects_non_utf8_input() {
         let error = format(b"x = \xff\n").expect_err("invalid UTF-8 should fail");
 
         assert_eq!(error.to_string(), "source is not valid UTF-8");
     }
 
     #[test]
-    fn preserves_a_byte_order_mark() {
+    fn test_preserves_a_byte_order_mark() {
         assert_eq!(format(b"\xef\xbb\xbfx=1\n").expect("valid Ruby"), "\u{feff}x = 1\n");
         assert_eq!(format(BOM).expect("bare BOM"), "\u{feff}\n");
     }
 
     #[test]
-    fn checks_formatting_without_rendering_an_output_string() {
+    fn test_checks_formatting_without_rendering_an_output_string() {
         assert!(is_formatted(b"x = 1\n").expect("valid Ruby"));
         assert!(is_formatted(b"\xef\xbb\xbfx = 1\n").expect("valid Ruby with BOM"));
         assert!(!is_formatted(b"x=1\n").expect("valid Ruby"));
@@ -649,7 +649,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_custom_width_and_indentation() {
+    fn test_supports_custom_width_and_indentation() {
         let options = FormatOptions {
             line_width: 8,
             indent_width: 2,
@@ -664,7 +664,7 @@ mod tests {
     }
 
     #[test]
-    fn consistent_delimited_arguments_break_at_the_line_indent() {
+    fn test_consistent_delimited_arguments_break_at_the_line_indent() {
         let options = FormatOptions {
             line_width: 30,
             indent_width: 4,
@@ -686,7 +686,7 @@ mod tests {
     }
 
     #[test]
-    fn same_line_assignments_keep_a_breakable_value_on_the_assignment_line() {
+    fn test_same_line_assignments_keep_a_breakable_value_on_the_assignment_line() {
         let options = FormatOptions {
             line_width: 30,
             indent_width: 4,
@@ -716,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_custom_ignore_directives() {
+    fn test_supports_custom_ignore_directives() {
         let options = FormatOptions {
             ignore_directives: vec!["keep".to_owned()],
             ..FormatOptions::default()
@@ -729,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_quote_policies() {
+    fn test_supports_quote_policies() {
         let preserve = FormatOptions {
             quote_style: crate::QuoteStyle::Preserve,
             ..FormatOptions::default()
@@ -754,7 +754,7 @@ mod tests {
     }
 
     #[test]
-    fn block_delimiters_choose_between_braces_and_do_end_where_both_parse() {
+    fn test_block_delimiters_choose_between_braces_and_do_end_where_both_parse() {
         use crate::options::BlockDelimiters;
         let fits = b"a.map { |v| v }\nb.map do |v|\n  v\nend\n";
         let breaks = b"a.map do |v|\n  first_long_call(v)\n  second_long_call(v)\nend\n";
@@ -808,7 +808,7 @@ mod tests {
     /// Formatting once must reach the fixpoint: the layout rules that treat a
     /// bracketed array specially see the array as it prints, not as written.
     #[test]
-    fn percent_array_modes_reach_the_fixpoint_in_one_pass() {
+    fn test_percent_array_modes_reach_the_fixpoint_in_one_pass() {
         let sources: [&[u8]; 4] = [
             b"x = %w[a b].to_h do |v|\n  v\nend\n",
             b"y = %w[a b].zip([long_name_one, long_name_two, long_name_three, long_name_four])\n",
@@ -847,7 +847,7 @@ mod tests {
     }
 
     #[test]
-    fn comments_between_a_pairs_key_and_value_move_the_value_down() {
+    fn test_comments_between_a_pairs_key_and_value_move_the_value_down() {
         let source = b"foo(\n  bounds: # why\n  # more\n  Bar.new(a: 1),\n  other: # only here\n  { a: 1 },\n  plain: Baz.new,\n)\n";
         assert_eq!(
             format(source).expect("valid Ruby"),
@@ -856,7 +856,7 @@ mod tests {
     }
 
     #[test]
-    fn avoiding_percent_arrays_spells_them_out_where_the_words_allow() {
+    fn test_avoiding_percent_arrays_spells_them_out_where_the_words_allow() {
         let avoid = FormatOptions {
             percent_arrays: crate::options::PercentArrays::Avoid,
             ..FormatOptions::default()
@@ -883,7 +883,7 @@ mod tests {
     }
 
     #[test]
-    fn percent_arrays_collapse_only_when_preferred_and_never_expand() {
+    fn test_percent_arrays_collapse_only_when_preferred_and_never_expand() {
         let source = b"w = ['a', 'b']\ns = [:a, :b]\nk = %w[c d]\n";
         let preserve = FormatOptions {
             percent_arrays: crate::options::PercentArrays::Preserve,
@@ -904,7 +904,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_collection_and_literal_policies() {
+    fn test_supports_collection_and_literal_policies() {
         let options = FormatOptions {
             line_width: 8,
             trailing_commas: false,
@@ -920,7 +920,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_implicit_rescue_policy() {
+    fn test_supports_implicit_rescue_policy() {
         let options = FormatOptions {
             explicit_standard_error: false,
             ..FormatOptions::default()
