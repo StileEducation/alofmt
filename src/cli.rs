@@ -534,7 +534,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn style_flags_override_defaults() {
+    fn test_style_flags_override_defaults() {
         let style = StyleOptions {
             line_width: Some(100),
             quote_style: Some(QuoteStyle::Preserve),
@@ -552,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn exit_status_prioritises_failures() {
+    fn test_exit_status_prioritises_failures() {
         assert_eq!(exit_status(true, 1, 1), ExitCode::from(2));
         assert_eq!(exit_status(true, 1, 0), ExitCode::from(1));
         assert_eq!(exit_status(true, 0, 0), ExitCode::SUCCESS);

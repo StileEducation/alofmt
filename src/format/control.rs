@@ -17,9 +17,9 @@ use ruby_prism::{
 };
 use rustc_hash::FxHashMap as HashMap;
 
-use super::{Formatter, calls};
 use crate::comments::Comment;
 use crate::doc::{COMMENT_PRIORITY, Doc, HARD, SOFT, SPACE};
+use crate::format::{Formatter, calls};
 
 /// Where a node sits relative to its parent.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1022,7 +1022,7 @@ fn jump_arguments(f: &mut Formatter<'_>, arguments: &[Node<'_>]) {
         [single]
             if single
                 .as_array_node()
-                .is_some_and(|a| super::calls::prints_bracketed(f, &a)) =>
+                .is_some_and(|a| crate::format::calls::prints_bracketed(f, &a)) =>
         {
             let elements: Vec<Node<'_>> = single.as_array_node().expect("kind").elements().iter().collect();
             if elements.len() >= 2 {

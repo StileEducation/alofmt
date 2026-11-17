@@ -21,8 +21,8 @@ use ruby_prism::{
     LocalVariableTargetNode, LocalVariableWriteNode, Location, MultiTargetNode, MultiWriteNode, Node,
 };
 
-use super::{Formatter, calls};
 use crate::doc::{SOFT, SPACE};
+use crate::format::{Formatter, calls};
 
 /// `lhs <operator> value` for every assignment operator (`=`, `||=`, `&&=`,
 /// `+=`, ...). The whole assignment is one group: when it does not fit, the

@@ -19,12 +19,12 @@ fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
 }
 
 #[test]
-fn fixtures_are_fixpoints() {
+fn test_fixtures_are_fixpoints() {
     assert_fixpoints(include_str!("compatibility.toml"), "/tests/fixtures");
 }
 
 #[test]
-fn layout_fixtures_are_fixpoints() {
+fn test_layout_fixtures_are_fixpoints() {
     assert_fixpoints(
         concat!(include_str!("compatibility.toml"), include_str!("layout.toml")),
         "/tests/layout_fixtures",
@@ -32,7 +32,7 @@ fn layout_fixtures_are_fixpoints() {
 }
 
 #[test]
-fn call_policy_fixtures_are_fixpoints() {
+fn test_call_policy_fixtures_are_fixpoints() {
     assert_fixpoints(
         concat!(include_str!("compatibility.toml"), include_str!("call_policies.toml")),
         "/tests/call_policy_fixtures",
@@ -40,7 +40,7 @@ fn call_policy_fixtures_are_fixpoints() {
 }
 
 #[test]
-fn omit_policy_fixtures_are_fixpoints() {
+fn test_omit_policy_fixtures_are_fixpoints() {
     assert_fixpoints(
         concat!(include_str!("compatibility.toml"), include_str!("omit_policies.toml")),
         "/tests/omit_policy_fixtures",

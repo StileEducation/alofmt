@@ -15,8 +15,8 @@
 use ruby_prism::{CallNode, Node};
 use rustc_hash::FxHashSet as HashSet;
 
-use super::control::span_of;
 use crate::FormatOptions;
+use crate::format::control::span_of;
 use crate::options::{MethodCallParentheses, RedundantSelf};
 
 #[derive(Default)]
@@ -258,7 +258,7 @@ impl<'o, 'pr> MembersWalk<'o, 'pr> {
                 | Node::ReturnNode { .. }
                 | Node::BreakNode { .. }
                 | Node::NextNode { .. }
-        ) || super::control::is_assignment(node)
+        ) || crate::format::control::is_assignment(node)
         {
             self.state.tail_nodes.insert(span_of(node));
         }

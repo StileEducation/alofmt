@@ -66,6 +66,9 @@ The command was `alofmt --check .`. The measurement includes ignore-aware
 discovery, file reads, Prism parsing, layout, and comparison. Results vary with
 the corpus, hardware, filesystem cache, and configured worker count.
 
+To compare two builds, `cargo run --locked --release --example bench_format` times formatting
+alone over the test fixtures, or over a directory given after `--`.
+
 Prism parses each file once. alofmt attaches comments in one AST traversal and
 constructs a compact arena-backed document. Unchanged source remains byte
 spans instead of copied strings. Width checks reuse scratch storage.

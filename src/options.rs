@@ -254,7 +254,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_do_not_encode_project_method_names_or_syntax_rewrites() {
+    fn test_defaults_do_not_encode_project_method_names_or_syntax_rewrites() {
         let options = FormatOptions::default();
 
         assert_eq!(options.indent_width, options.fit_indent_width);
@@ -290,7 +290,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_call_policies() {
+    fn test_parses_call_policies() {
         let options = FormatOptions::from_toml(
             r#"
                 method_call_with_args_parentheses = "require_parentheses"
@@ -316,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_omit_call_policies() {
+    fn test_parses_omit_call_policies() {
         let options = FormatOptions::from_toml(
             r#"
                 method_call_with_args_parentheses = "omit_parentheses"
@@ -338,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_method_names() {
+    fn test_rejects_empty_method_names() {
         let options = FormatOptions {
             allowed_methods: vec![String::new()],
             ..FormatOptions::default()
@@ -351,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_zero_widths() {
+    fn test_rejects_zero_widths() {
         let options = FormatOptions {
             line_width: 0,
             ..FormatOptions::default()
@@ -364,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_multiline_ignore_directives() {
+    fn test_rejects_multiline_ignore_directives() {
         let options = FormatOptions {
             ignore_directives: vec!["alofmt-ignore\nnext".to_owned()],
             ..FormatOptions::default()
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_partial_configuration_over_defaults() {
+    fn test_parses_partial_configuration_over_defaults() {
         let options = FormatOptions::from_toml(
             r#"
                 line_width = 100
@@ -401,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_configuration_fields() {
+    fn test_rejects_unknown_configuration_fields() {
         let error = FormatOptions::from_toml("line_wdith = 100").expect_err("misspelled field should fail");
 
         assert!(error.to_string().contains("parse formatter configuration"));

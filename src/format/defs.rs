@@ -9,8 +9,8 @@ use ruby_prism::{
     SingletonClassNode, UndefNode,
 };
 
-use super::Formatter;
 use crate::doc::{HARD, SOFT, SPACE};
+use crate::format::Formatter;
 
 /// How a parameter list separates its entries.
 #[derive(Clone, Copy, PartialEq, Eq)]

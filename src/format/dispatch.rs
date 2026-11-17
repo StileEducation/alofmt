@@ -2,7 +2,7 @@
 
 use ruby_prism::Node;
 
-use super::{Formatter, assign, calls, control, defs, literals, patterns, strings};
+use crate::format::{Formatter, assign, calls, control, defs, literals, patterns, strings};
 
 impl Formatter<'_> {
     pub(super) fn dispatch(&mut self, node: &Node<'_>) {

@@ -7,7 +7,7 @@ use ruby_prism::{
     ShareableConstantNode, SourceEncodingNode, SourceFileNode, SourceLineNode, TrueNode,
 };
 
-use super::Formatter;
+use crate::format::Formatter;
 
 pub fn back_reference_read_node(f: &mut Formatter<'_>, node: &BackReferenceReadNode<'_>) {
     f.text_of(&node.location());

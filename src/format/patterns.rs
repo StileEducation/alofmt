@@ -11,9 +11,9 @@ use ruby_prism::{
     PinnedExpressionNode, PinnedVariableNode,
 };
 
-use super::Formatter;
 use crate::comments::Comment;
 use crate::doc::{HARD, SOFT, SPACE};
+use crate::format::Formatter;
 
 /// `a | b | c` prints as a fill: after each `|` the next alternative stays on
 /// the line when it fits and drops to the next otherwise, all continuation

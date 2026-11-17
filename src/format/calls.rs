@@ -11,10 +11,10 @@ use ruby_prism::{
     YieldNode,
 };
 
-use super::members::identifier_name;
-use super::{AttachedSlot, Formatter, assign, strings};
 use crate::comments::Comment;
 use crate::doc::{Builder, Doc, Fragment, HARD, SOFT, SPACE};
+use crate::format::members::identifier_name;
+use crate::format::{AttachedSlot, Formatter, assign, strings};
 use crate::options::{MethodCallParentheses, RedundantSelf};
 
 /// Layout context inherited from enclosing nodes; lives on the [`Formatter`].
@@ -1128,7 +1128,7 @@ fn arguments_need_parentheses(
         return true;
     }
     arguments.iter().flat_map(|a| a.arguments().iter()).any(|argument| {
-        super::control::is_assignment(&argument)
+        crate::format::control::is_assignment(&argument)
             || matches!(
                 argument,
                 Node::IfNode { .. }
